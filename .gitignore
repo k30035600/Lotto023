@@ -22,7 +22,11 @@ Thumbs.db
 # Environment
 .env
 .env.local
+__pycache__/
+temp/
+*.png
 
-# Database files (optional - uncomment if you don't want to track)
+# Database and Data files
 # LottoDB.json
-
+source/*.json
+source/*_old.xlsx
