@@ -66,6 +66,10 @@ def analyze_lotto_patterns(history_text, user_question, api_key):
             # 401 Unauthorized 등은 다시 시도해도 가망 없으므로 즉시 중단
             if '401' in last_error or 'API_KEY_INVALID' in last_error:
                 raise Exception(f"API 키가 올바르지 않습니다: {last_error[:100]}")
+            
+            # 429 Quota Exceeded 처리
+            if '429' in last_error or 'RESOURCE_EXHAUSTED' in last_error:
+                raise Exception("Google API 할당량을 초과했습니다. 잠시 후 다시 시도하거나 내일 이용해주세요. (무료 버전은 분당/일일 제한이 있습니다)")
             continue
     
     # 모든 모델 시도 후 실패 시

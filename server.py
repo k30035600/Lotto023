@@ -794,15 +794,16 @@ def api_ask_gemini():
 
     try:
         req_data = request.get_json() or {}
-        user_question = req_data.get('question', '최근 로또 번호 패턴 분석해줘')
+        user_question = req_data.get('question', '최근 로또 패턴 분석해줘')
         start_round_param = req_data.get('startRound')
         end_round_param = req_data.get('endRound')
+        target_rounds = req_data.get('targetRounds')  # 회차별 당첨조회 기준 필터링된 목록
         
         # 최근 로또 데이터 로드 (JSON)
         json_path = (BASE_DIR / 'source' / 'Lotto645.json').resolve()
         
         recent_data = []
-        analyze_count = 30  # 기본 분석 데이터 수
+        analyze_count = 30  # 기본 분석 데이터 수 (최근 30회)
 
         if json_path.is_file():
             with open(json_path, 'r', encoding='utf-8') as f:
@@ -814,24 +815,29 @@ def api_ask_gemini():
                     
                     data.sort(key=lambda x: x['_round_int'], reverse=True)
 
-                    max_analyze_count = 100
+                    max_analyze_count = 30
                     try:
-                        s_target = int(start_round_param) if start_round_param else None
-                        e_target = int(end_round_param) if end_round_param else None
+                        # 1. 특정 회차 목록이 전달된 경우 (회차별 당첨조회 기준)
+                        if target_rounds and isinstance(target_rounds, list):
+                            round_set = set(int(r) for r in target_rounds)
+                            # JSON 데이터에서 해당 회차들만 추출하여 최신순 정렬
+                            recent_data = [item for item in data if item['_round_int'] in round_set]
+                            # 분석 속도를 위해 최근 N개로 제한
+                            if len(recent_data) > max_analyze_count:
+                                recent_data = recent_data[:max_analyze_count]
                         
-                        if s_target and e_target:
-                            # 사용자가 지정한 범위 필터링
-                            matched_data = [item for item in data if s_target <= item['_round_int'] <= e_target]
-                            # 너무 많은 데이터는 AI 처리에 부담이 될 수 있으므로 최근 N개로 제한
-                            if len(matched_data) > max_analyze_count:
-                                recent_data = matched_data[:max_analyze_count]
-                            else:
-                                recent_data = matched_data
+                        # 2. 시작/종료 범위가 지정된 경우
+                        elif start_round_param and end_round_param:
+                            s_target = int(start_round_param)
+                            e_target = int(end_round_param)
+                            recent_data = [item for item in data if s_target <= item['_round_int'] <= e_target]
+                            if len(recent_data) > max_analyze_count:
+                                recent_data = recent_data[:max_analyze_count]
+                        
+                        # 3. 기본값 (최신 N회차)
                         else:
-                            # 범위가 없으면 최신 N회차
                             recent_data = data[:analyze_count]
                     except (ValueError, TypeError):
-                        # 파라미터 오류 시 기본값 사용
                         recent_data = data[:analyze_count]
 
                     # 3. 시계열 분석을 위해 과거 -> 최신 순(오름차순)으로 재정렬

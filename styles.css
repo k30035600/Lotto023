@@ -2312,18 +2312,22 @@ textarea:focus {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 20px;
-    /* 섹션 간 간격 확대 */
-    padding: 6px 12px;
+    gap: 12px;
+    /* 섹션 간 간격 축소 */
+    padding: 4px 8px;
     flex-wrap: wrap;
     justify-content: flex-start;
+}
+
+#dateRangeBox .range-row:nth-child(2) {
+    margin-left: auto;
 }
 
 #dateRangeBox .range-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    /* 라디오와 입력창 사이 간격 */
+    gap: 4px;
+    /* 라디오와 입력창 사이 간격 축소 */
     flex: 0 0 auto;
 }
 
@@ -2359,29 +2363,29 @@ textarea:focus {
 #dateRangeBox .range-input {
     width: 100%;
     /* flex item 축소 가능하게 */
-    padding: 2px 4px;
+    padding: 1px 4px;
     border: 1px solid #ccc;
     border-radius: 4px;
     text-align: center;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     background-color: #fff;
     color: #000;
     transition: background-color 0.2s, border-color 0.2s;
-    height: 26px;
+    height: 23px;
     box-sizing: border-box;
 }
 
 /* 회차 입력 필드 너비 조정 (4자리) */
 #startRound,
 #endRound {
-    width: 50px !important;
+    width: 44px !important;
     flex: none !important;
 }
 
 /* 기간 입력 필드 너비 조정 (YY/MM/DD) */
 #startDate,
 #endDate {
-    width: 85px !important;
+    width: 78px !important;
     flex: none !important;
 }
 

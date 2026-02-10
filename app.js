@@ -1553,6 +1553,35 @@ async function initializeApp() {
             } else {
                 console.error('[App] selectDateRangeBtn not found!');
             }
+
+            // 최근 30회 버튼 클릭 시
+            const recent30Btn = document.getElementById('recent30Btn');
+            if (recent30Btn) {
+                recent30Btn.addEventListener('click', function () {
+                    const startRoundInput = document.getElementById('startRound');
+                    const endRoundInput = document.getElementById('endRound');
+                    const rangeRadios = document.getElementsByName('rangeType');
+
+                    if (AppState.allLotto645Data && AppState.allLotto645Data.length > 0) {
+                        const maxRound = AppState.allLotto645Data[0].round;
+                        const firstRound = Math.max(1, maxRound - 29);
+
+                        if (startRoundInput) startRoundInput.value = firstRound;
+                        if (endRoundInput) endRoundInput.value = maxRound;
+
+                        // 회차 라디오 선택
+                        if (rangeRadios) {
+                            for (let radio of rangeRadios) {
+                                if (radio.value === 'round') radio.checked = true;
+                            }
+                        }
+
+                        // 날짜/UI 동기화 및 갱신
+                        if (typeof updateRoundDisplay === 'function') updateRoundDisplay();
+                        updateStatsByDateRange();
+                    }
+                });
+            }
         }
 
         // 기본값 설정 (1회차 ~ 가장 최근 회차)
@@ -1561,7 +1590,7 @@ async function initializeApp() {
             const endRoundInput = document.getElementById('endRound');
 
             const maxRound = lotto645Data[0].round; // 최신 회차
-            const firstRound = 1; // 시작 회차
+            const firstRound = Math.max(1, maxRound - 29); // 최근 30회차 기준 시작 회차
 
             if (startRoundInput) startRoundInput.value = firstRound;
             if (endRoundInput) endRoundInput.value = maxRound;
@@ -2108,7 +2137,7 @@ function renderStatsList() {
             rightPart.style.alignItems = 'center';
             rightPart.style.gap = '4px';
             rightPart.style.flexShrink = '0';
-            const pct = totalRounds > 0 ? ((entry.count / totalRounds) * 100).toFixed(2) : '0.00';
+            const pct = totalRounds > 0 ? ((entry.count / totalRounds) * 100).toFixed(1) : '0.0';
             rightPart.innerHTML = '<span style="font-weight:700;">' + entry.count + '</span><span>회</span> <span style="color:#666;">(' + pct + '%)</span>';
             statLine.appendChild(leftPart);
             statLine.appendChild(rightPart);
@@ -2196,7 +2225,7 @@ function renderStatsList() {
         const percentage = percentageMap.get(stat.number) || 0;
         const percent = document.createElement('span');
         percent.style.color = '#666666';
-        percent.textContent = `(${percentage.toFixed(2)}%)`;
+        percent.textContent = `(${percentage.toFixed(1)}%)`;
 
         statInfo.appendChild(count);
         statInfo.appendChild(countUnit);
@@ -4603,6 +4632,8 @@ function renderViewNumbersList(baseData) {
         sortedRounds = [...toDisplay].sort((a, b) => b.round - a.round);
     }
 
+    AppState.currentViewRounds = sortedRounds; // AI 분석 참고용으로 저장
+
     // 초기 렌더링 (최대 50개)
     const initialBatch = sortedRounds.slice(0, INITIAL_DISPLAY_COUNT);
     initialBatch.forEach(round => {
@@ -4813,6 +4844,10 @@ function initAIChat() {
             if (systemMsg) {
                 if (startRound && endRound) {
                     systemMsg.innerHTML = `안녕하세요! 현재 설정된 <b>${startRound}회 ~ ${endRound}회</b> 데이터를 기반으로 로또 번호를 분석해 드립니다.<br>궁금한 점을 물어보세요.`;
+                } else if (AppState.currentViewRounds && AppState.currentViewRounds.length > 0) {
+                    const count = AppState.currentViewRounds.length;
+                    const displayCount = count > 30 ? 30 : count;
+                    systemMsg.innerHTML = `안녕하세요! 우측 패널에 조회된 데이터를 기반으로(최신 ${displayCount}회차 참고) 로또 번호를 분석해 드립니다.<br>궁금한 점을 물어보세요.`;
                 } else {
                     systemMsg.innerHTML = `안녕하세요! 최근 30회차 데이터를 기반으로 로또 번호를 분석해 드립니다.<br>궁금한 점을 물어보세요.`;
                 }
@@ -4851,7 +4886,8 @@ function initAIChat() {
                 body: JSON.stringify({
                     question: text,
                     startRound: startRound,
-                    endRound: endRound
+                    endRound: endRound,
+                    targetRounds: AppState.currentViewRounds ? AppState.currentViewRounds.map(r => r.round) : null
                 })
             });
             const data = await response.json();
@@ -4958,7 +4994,7 @@ function renderMonthlyAverageChart(currentData) {
     // 2. 현재 선택된 데이터 기반 평균 계산
     const validSums = roundSums.filter(s => s !== null);
     const overallAverage = validSums.length > 0
-        ? parseFloat((validSums.reduce((acc, sum) => acc + sum, 0) / validSums.length).toFixed(2))
+        ? parseFloat((validSums.reduce((acc, sum) => acc + sum, 0) / validSums.length).toFixed(1))
         : 0;
 
     // 3. 차트 너비 계산 및 스크롤바 설정을 위한 wrapper 처리
