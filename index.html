@@ -51,7 +51,6 @@
                         </div>
                         <div class="date-range-button">
                             <button id="selectDateRangeBtn" class="filter-btn">조회</button>
-                            <button id="recent30Btn" class="filter-btn">최근 30회</button>
                         </div>
                     </div>
                     <div class="stats-sort">
@@ -74,21 +73,20 @@
             <!-- 중앙 패널 (게임 패널) -->
             <div class="panel-box">
                 <div class="game-panel center-panel">
-                    <!-- 선택공 헤더와 필터 박스 컨테이너 (동적 생성) -->
-                    <div id="numberGridHeaderContainer"></div>
-
-                    <!-- 선택공 그리드가 여기에 동적으로 생성됩니다 -->
+                    <!-- 선택공 그리드 영역 (JS에서 stats-box로 감싸 동적 생성) -->
 
                     <!-- 선택박스 -->
                     <div id="filterBox" class="stats-box">
                         <div class="filter-container">
                             <select id="oddEvenFilter">
                                 <option value="none">홀짝없음</option>
+                                <option value="0-6">홀짝0:6</option>
                                 <option value="1-5">홀짝1:5</option>
                                 <option value="2-4">홀짝2:4</option>
                                 <option value="3-3">홀짝3:3</option>
                                 <option value="4-2">홀짝4:2</option>
                                 <option value="5-1">홀짝5:1</option>
+                                <option value="6-0">홀짝6:0</option>
                             </select>
                             <select id="sequenceFilter">
                                 <option value="none">연속없음</option>
@@ -98,11 +96,13 @@
                             </select>
                             <select id="hotColdFilter">
                                 <option value="none">핫콜없음</option>
+                                <option value="0-6">핫콜0:6</option>
                                 <option value="1-5">핫콜1:5</option>
                                 <option value="2-4">핫콜2:4</option>
                                 <option value="3-3">핫콜3:3</option>
                                 <option value="4-2">핫콜4:2</option>
                                 <option value="5-1">핫콜5:1</option>
+                                <option value="6-0">핫콜6:0</option>
                             </select>
                             <div class="sum-range-box">
                                 <input type="number" id="sumRangeStart" placeholder="시작" min="21" max="255"
@@ -125,7 +125,6 @@
                     <div id="saveBox" class="stats-box">
                         <div class="save-container">
                             <input type="number" id="saveRound" placeholder="회차" disabled />
-                            <input type="number" id="saveSet" placeholder="세트" min="0" disabled />
                             <button id="saveBtn" class="sort-btn" disabled>저장</button>
                         </div>
                     </div>
@@ -195,7 +194,7 @@
         </div>
         <div class="ai-chat-body" id="aiChatBody">
             <div class="ai-message system">
-                안녕하세요! 최근 30회차 데이터를 기반으로 로또 번호를 분석해 드립니다.<br>
+                안녕하세요! 데이터를 기반으로 로또 번호를 분석해 드립니다.<br>
                 궁금한 점을 물어보세요. (예: "이번 주 추천 번호는?", "최근 홀짝 비율은?")
             </div>
         </div>

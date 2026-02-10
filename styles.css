@@ -374,9 +374,9 @@ body {
     transition: all 0.2s ease;
     min-width: 0;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    height: 28px;
+    height: 30px;
     box-sizing: border-box;
-    line-height: 1.2;
+    line-height: normal;
 }
 
 .stats-sort button:hover {
@@ -767,7 +767,7 @@ body {
     align-items: center;
     justify-content: center;
     width: 80px;
-    height: 28px;
+    height: 30px;
     box-sizing: border-box;
 }
 
@@ -1838,8 +1838,8 @@ textarea:focus {
     cursor: pointer;
     flex: 1;
     min-width: 0;
-    height: 24px;
-    min-height: 24px;
+    height: 30px;
+    min-height: 30px;
     box-sizing: border-box;
     white-space: nowrap;
     line-height: 1;
@@ -1920,19 +1920,22 @@ textarea:focus {
     display: flex;
     flex-direction: row;
     align-items: center;
+    justify-content: space-between;
     flex-wrap: nowrap;
     gap: 0;
     width: 100%;
+    padding: 0 12px;
     min-width: 0;
     box-sizing: border-box;
 }
 
 #saveBox input[type="number"] {
-    flex: 1 1 0;
+    flex: 0 0 33.33%;
     min-width: 0;
-    margin: 0 10px;
+    margin: 0;
+    margin-left: 6px;
     padding: 2px 6px;
-    height: 26px;
+    height: 30px;
     box-sizing: border-box;
     border-radius: 4px;
     border: 1px solid #808080;
@@ -1943,11 +1946,12 @@ textarea:focus {
 }
 
 #saveBox button {
-    flex: 1 1 0;
+    flex: 0 0 33.33%;
     min-width: 0;
-    margin: 0 10px;
+    margin: 0;
+    margin-right: 6px;
     padding: 2px 6px;
-    height: 26px;
+    height: 30px;
     box-sizing: border-box;
     border-radius: 4px;
     border: 1px solid #808080;
@@ -2039,7 +2043,7 @@ textarea:focus {
 
     #saveBox input[type="number"],
     #saveBox button {
-        flex: 1;
+        flex: 0 0 33.33%;
         min-width: 0;
     }
 }
