@@ -66,7 +66,8 @@ const AppState = {
     }
 };
 
-let activeFilters = AppState.activeFilters;
+// Removed redundant: let activeFilters = AppState.activeFilters;
+// Use AppState.activeFilters directly instead
 
 /** 유틸리티 - XLSX 파일 로드 및 데이터 처리 */
 const getBasePath = () => {
@@ -131,7 +132,7 @@ const loadLotto645Data = async () => {
             const parsed = JSON.parse(cachedData);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 console.timeEnd('LoadLotto645_LocalStorage');
-                console.log(`[Lotto645] Loaded ${parsed.length} rounds from LocalStorage.`);
+                // console.log(`[Lotto645] Loaded ${parsed.length} rounds from LocalStorage.`);
                 // 캐시된 데이터라도 정렬 보장
                 return parsed.sort((a, b) => b.round - a.round);
             }
@@ -159,7 +160,7 @@ const loadLotto645Data = async () => {
                     .sort((a, b) => b.round - a.round);
 
                 console.timeEnd('LoadLotto645_JSON');
-                console.log(`[Lotto645] Loaded ${result.length} rounds from JSON.`);
+                // console.log(`[Lotto645] Loaded ${result.length} rounds from JSON.`);
                 try {
                     localStorage.setItem('LOTTO645_DATA_CACHE', JSON.stringify(result));
                 } catch (e) {
@@ -1575,7 +1576,7 @@ async function initializeApp() {
             // 선택 버튼 클릭 시 날짜 필터링 적용
             const selectBtnTag = document.getElementById('selectDateRangeBtn');
             if (selectBtnTag) {
-                console.log('[App] Attaching click event to selectDateRangeBtn');
+                // console.log('[App] Attaching click event to selectDateRangeBtn');
                 selectBtnTag.addEventListener('click', updateStatsByDateRange);
             } else {
                 console.error('[App] selectDateRangeBtn not found!');
@@ -1701,7 +1702,7 @@ async function initializeApp() {
                     });
                 }
             })
-            .catch(err => console.log('Server time fetch failed:', err));
+            .catch(err => { /* Server time fetch failed */ });
     } catch (error) {
         alert('애플리케이션 초기화 중 오류가 발생했습니다: ' + error.message);
     }
@@ -4093,7 +4094,7 @@ function extractAndApplyFilters(filteredData) {
     const bestSeq = getMode(sequenceCounts);
     const bestHC = getMode(hotColdCounts);
 
-    console.log(`[Extract] Best OE: ${bestOE}, Best Seq: ${bestSeq}, Best HC: ${bestHC}, Sum: ${minSum}~${maxSum}`);
+    // console.log(`[Extract] Best OE: ${bestOE}, Best Seq: ${bestSeq}, Best HC: ${bestHC}, Sum: ${minSum}~${maxSum}`);
 
     // UI에 적용
     const oeEl = document.getElementById('oddEvenFilter');
@@ -4128,7 +4129,7 @@ function extractAndApplyFilters(filteredData) {
  * 날짜 범위 또는 회차 범위 변경 시 통계 및 회차별 당첨번호 업데이트
  */
 function updateStatsByDateRange() {
-    console.log('[updateStatsByDateRange] Called');
+    // console.log('[updateStatsByDateRange] Called');
     const type = getRangeType();
 
     const startRoundInput = document.getElementById('startRound');
@@ -4161,7 +4162,7 @@ function updateStatsByDateRange() {
         const startRound = parseInt(sVal, 10);
         const endRound = parseInt(eVal, 10);
 
-        console.log(`[Lotto] Filtering by round: ${startRound} ~ ${endRound}`);
+        // console.log(`[Lotto] Filtering by round: ${startRound} ~ ${endRound}`);
 
         if (isNaN(startRound) || isNaN(endRound)) {
             alert('회차는 숫자로 입력해주세요.');
@@ -4175,7 +4176,7 @@ function updateStatsByDateRange() {
 
         // 회차 필터링
         filteredData = AppState.allLotto645Data.filter(r => r.round >= startRound && r.round <= endRound);
-        console.log(`[Lotto] Filtered result count: ${filteredData.length}`);
+        // console.log(`[Lotto] Filtered result count: ${filteredData.length}`);
     } else {
         const startDate = convertFromYYMMDD(sVal);
         const endDate = convertFromYYMMDD(eVal);
@@ -4189,7 +4190,7 @@ function updateStatsByDateRange() {
             return;
         }
         filteredData = filterDataByDateRange(AppState.allLotto645Data, startDate, endDate);
-        console.log(`[Lotto] Filtered result count (date): ${filteredData.length}`);
+        // console.log(`[Lotto] Filtered result count (date): ${filteredData.length}`);
     }
 
     if (filteredData.length === 0) {
