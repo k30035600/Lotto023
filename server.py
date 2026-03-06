@@ -35,7 +35,11 @@ from utils.logger import get_logger
 
 # --- 설정 ---
 PORT = int(os.environ.get('PORT', 8000))
-CORS_HEADERS = {'Access-Control-Allow-Origin': '*'}
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+}
 CORS_OPTIONS_HEADERS = {**CORS_HEADERS, 'Content-Length': '0'}
 SERVER_START_TIME = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))).strftime('%Y-%m-%d %H:%M:%S')
 
