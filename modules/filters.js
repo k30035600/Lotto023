@@ -6,12 +6,7 @@
 /**
  * 필터 타입 정의
  */
-const FILTER_TYPES = {
-    STAT: ['none', 'count-desc', 'count-asc', 'percentage-desc', 'percentage-asc'],
-    SEQUENCE: ['none', '0', '1', '2', '3'],
-    ODD_EVEN: ['none', 'odd', 'even', 'balanced'],
-    HOT_COLD: ['none', 'hot', 'cold', 'mixed']
-};
+// FILTER_TYPES는 constants.js에서 전역으로 정의됨
 
 /**
  * 홀수/짝수 번호 분리

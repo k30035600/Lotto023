@@ -1,428 +1,85 @@
-const CONFIG = {
-    DEFAULT_SET_COUNT: 5,
-    LOTTO: {
-        MAX_NUMBER: 45,
-        MIN_NUMBER: 1,
-        SET_SIZE: 6,
-        MAX_GENERATION_ATTEMPTS: 1000,
-        MAX_PREFERRED_NUMBERS: 5
-    }
-};
-
-const DEFAULT_SET_COUNT = CONFIG.DEFAULT_SET_COUNT;
-const LOTTO_CONSTANTS = CONFIG.LOTTO;
-
-const HOT_COLD_RATIO_MAP = {
-    "hot": { hot: 4, cold: 2 },
-    "cold": { hot: 2, cold: 4 },
-    "mixed": { hot: 3, cold: 3 }
-};
-
-const ODD_EVEN_RATIO_MAP = {
-    "odd": { odd: 4, even: 2 },
-    "even": { odd: 2, even: 4 },
-    "balanced": { odd: 3, even: 3 }
-};
+// constants.js에서 로드된 전역 변수들이 사용됩니다.
+// DEFAULT_SET_COUNT: 기본 세트 수
+// LOTTO_CONSTANTS: 로또 관련 상수
+// HOT_COLD_RATIO_MAP: 핫/콜 비율 맵
+// ODD_EVEN_RATIO_MAP: 홀/짝 비율 맵
 
 /** 전역 상태 관리 모듈 */
-const AppState = {
-    currentSets: [],
-    setSelectedBalls: Array.from({ length: DEFAULT_SET_COUNT }, () => []),
-    ballsToReplace: Array.from({ length: DEFAULT_SET_COUNT }, () => null),
-    rememberedBalls: [],
-    gameModes: Array.from({ length: DEFAULT_SET_COUNT }, () => "semi-auto"),
-    activeFilters: { statFilter: "none", sequence: "none", oddEven: "none", hotCold: "none" },
-    toggleStates: { statFilter: "none", sequence: "none", oddEven: "none", hotCold: "none" },
-    statFilterOriginalNumbers: [],
-    selectedPreferredNumbers: [],
-    winStats: [],
-    winStatsMap: new Map(),
-    appearanceStatsMap: new Map(),
-    avgCountCache: null,
-    avgPercentageCache: null,
-    winPercentageCache: null,
-    appearancePercentageCache: null,
-    currentStats: [],
-    currentSort: "number-asc",
-    allLotto645Data: [],
-    selectedSeqRounds: null,
-    seqFilterType: null,
-    startRound: null,
-    endRound: null,
-    latestRoundApi: null,
-    latestRoundDateApi: null,
-    sumRangeStart: 21,
-    sumRangeEnd: 255,
-    overallHotColdCache: null,
-    reset() {
-        this.currentSets = [];
-        this.setSelectedBalls = Array.from({ length: DEFAULT_SET_COUNT }, () => []);
-        this.ballsToReplace = Array.from({ length: DEFAULT_SET_COUNT }, () => null);
-        this.rememberedBalls = [];
-        this.statFilterOriginalNumbers = [];
-        this.gameModes = Array.from({ length: DEFAULT_SET_COUNT }, () => "manual");
-        this.activeFilters = { statFilter: "none", sequence: "none", oddEven: "none", hotCold: "none" };
-        this.toggleStates = { statFilter: "none", sequence: "none", oddEven: "none", hotCold: "none" };
-    }
-};
+// AppState는 modules/state.js에서 로드됩니다.
 
 // Removed redundant: let activeFilters = AppState.activeFilters;
 // Use AppState.activeFilters directly instead
 
-/** 유틸리티 - XLSX 파일 로드 및 데이터 처리 */
-const getBasePath = () => {
-    const p = (window.location.pathname || '/').replace(/\/[^/]*$/, '') || '';
-    return p.endsWith('/') ? p : p + '/';
-};
+// loadLotto645Data, loadLotto023Data 및 관련 유틸리티는 dataLoader.js에서 로드됩니다.
 
-/** API 요청용 절대 URL (끝 슬래시 없음) */
-function getApiBaseUrl() {
-    const base = (typeof getBasePath === 'function' ? getBasePath() : '') || (window.LOTTO_BACKEND_URL || '');
-    if (base.startsWith('http')) return base.replace(/\/$/, '');
-    return (window.location.origin || '').replace(/\/$/, '');
-}
-
-const XLSX_PATHS = {
-    get LOTTO645() { return getBasePath() + 'source/Lotto645.xlsx'; },
-    get LOTTO023() { return getBasePath() + 'source/Lotto023.xlsx'; }
-};
-const LOTTO_NUMBER_COUNT = 6;
-const MIN_ROUND = 1;
-const DEFAULT_MAX_NUMBER = 45;
-
-/** XLSX ArrayBuffer를 파싱하여 첫 시트를 객체 배열로 반환 */
-const parseXLSX = (arrayBuffer) => {
-    if (typeof XLSX === 'undefined') return [];
-    const wb = XLSX.read(arrayBuffer, { type: 'array' });
-    const firstSheetName = wb.SheetNames[0];
-    if (!firstSheetName) return [];
-    const sheet = wb.Sheets[firstSheetName];
-    return XLSX.utils.sheet_to_json(sheet, { defval: '' });
-};
-
-/** 숫자 문자열을 정수로 변환 (안전한 파싱) */
-const safeParseInt = (value, defaultValue = 0) => {
-    const parsed = parseInt(value, 10);
-    return isNaN(parsed) ? defaultValue : parsed;
-};
-
-/** 로또 번호 배열 생성 (번호1~6) */
-const extractLottoNumbers = (row) => {
-    const numbers = [];
-    for (let i = 1; i <= LOTTO_NUMBER_COUNT; i++) {
-        const num = safeParseInt(row[`번호${i}`]);
-        if (num > 0) numbers.push(num);
-    }
-    return numbers;
-};
-
-const JSON_PATHS = {
-    get LOTTO645() { return getBasePath() + 'source/Lotto645.json'; },
-    get LOTTO023() { return getBasePath() + 'source/Lotto023.json'; }
-};
-
-/** Lotto645 데이터 로드 (JSON 우선, 실패 시 XLSX) */
-/** Lotto645 데이터 로드 (LocalStorage 우선, 실패 시 JSON/XLSX) */
-const loadLotto645Data = async () => {
-    // 0. LocalStorage 시도
-    console.time('LoadLotto645_LocalStorage');
-    try {
-        const cachedData = localStorage.getItem('LOTTO645_DATA_CACHE');
-        if (cachedData) {
-            const parsed = JSON.parse(cachedData);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                console.timeEnd('LoadLotto645_LocalStorage');
-                // console.log(`[Lotto645] Loaded ${parsed.length} rounds from LocalStorage.`);
-                // 캐시된 데이터라도 정렬 보장
-                return parsed.sort((a, b) => b.round - a.round);
-            }
-        }
-    } catch (e) {
-        console.warn('LocalStorage 로드 실패:', e);
-        localStorage.removeItem('LOTTO645_DATA_CACHE');
-    }
-    console.timeEnd('LoadLotto645_LocalStorage');
-
-    // 1. JSON 시도
-    console.time('LoadLotto645_JSON');
-    try {
-        const jsonUrl = JSON_PATHS.LOTTO645 + '?t=' + Date.now();
-        const response = await fetch(jsonUrl, { cache: 'no-store' });
-        if (response.ok) {
-            const data = await response.json();
-            if (Array.isArray(data) && data.length > 0) {
-                const result = data.map(row => ({
-                    round: safeParseInt(row['회차']),
-                    date: String(row['날짜'] || ''),
-                    numbers: extractLottoNumbers(row),
-                    bonus: safeParseInt(row['보너스번호'])
-                })).filter(item => item.round >= MIN_ROUND && item.numbers.length === LOTTO_NUMBER_COUNT)
-                    .sort((a, b) => b.round - a.round);
-
-                console.timeEnd('LoadLotto645_JSON');
-                // console.log(`[Lotto645] Loaded ${result.length} rounds from JSON.`);
-                try {
-                    localStorage.setItem('LOTTO645_DATA_CACHE', JSON.stringify(result));
-                } catch (e) {
-                    console.warn('LocalStorage 저장 실패 (용량 초과 등):', e);
-                }
-                return result;
-            }
-        }
-    } catch (e) {
-        console.warn('Lotto645.json 로드 실패, XLSX 시도:', e);
-    }
-    console.timeEnd('LoadLotto645_JSON');
-
-    // 2. XLSX 폴백
-    const baseUrl = XLSX_PATHS.LOTTO645;
-    const url = baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-        const response = await fetch(url, {
-            signal: controller.signal,
-            cache: 'no-store',
-            headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
-        });
-        clearTimeout(timeoutId);
-        if (!response.ok) throw new Error(`Failed to load Lotto645: ${response.status} ${response.statusText}`);
-        const ab = await response.arrayBuffer();
-        const parsedData = parseXLSX(ab);
-        const transformedData = parsedData.map(row => ({
-            round: safeParseInt(row['회차']),
-            date: String(row['날짜'] || ''),
-            numbers: extractLottoNumbers(row),
-            bonus: safeParseInt(row['보너스번호'])
-        }));
-        let result = transformedData.filter(item => item.round >= MIN_ROUND && item.numbers.length === LOTTO_NUMBER_COUNT);
-        result = result.slice().sort((a, b) => (b.round - a.round));
-
-        try {
-            localStorage.setItem('LOTTO645_DATA_CACHE', JSON.stringify(result));
-        } catch (e) {
-            console.warn('LocalStorage 저장 실패 (용량 초과 등):', e);
-        }
-        return result;
-    } catch (error) {
-        console.error('Lotto645.xlsx 로드 실패:', error);
-        return [];
-    }
-};
-
-/** Lotto023 데이터 로드 (JSON 우선, 실패 시 XLSX) */
-const loadLotto023Data = async () => {
-    // 1. JSON 시도
-    try {
-        const jsonUrl = JSON_PATHS.LOTTO023 + '?t=' + Date.now();
-        const response = await fetch(jsonUrl, { cache: 'no-store' });
-        if (response.ok) {
-            const data = await response.json();
-            if (Array.isArray(data) && data.length > 0) {
-                const result = data.map(row => ({
-                    round: safeParseInt(row['회차']),
-                    set: safeParseInt(row['세트']),
-                    game: safeParseInt(row['게임']),
-                    oddEven: safeParseInt(row['홀짝']),
-                    sequence: safeParseInt(row['연속']),
-                    hotCold: safeParseInt(row['핫콜']),
-                    gameMode: String(row['게임선택'] || ''),
-                    numbers: extractLottoNumbers({
-                        번호1: row['선택1'], 번호2: row['선택2'], 번호3: row['선택3'],
-                        번호4: row['선택4'], 번호5: row['선택5'], 번호6: row['선택6']
-                    })
-                })).filter(item => item.round >= MIN_ROUND && item.numbers.length === LOTTO_NUMBER_COUNT);
-                return result;
-            }
-        }
-    } catch (e) {
-        console.warn('Lotto023.json 로드 실패, XLSX 시도:', e);
-    }
-
-    // 2. XLSX 폴백
-    try {
-        const response = await fetch(XLSX_PATHS.LOTTO023);
-        if (!response.ok) throw new Error(`Failed to load Lotto023: ${response.statusText}`);
-        const ab = await response.arrayBuffer();
-        const parsedData = parseXLSX(ab);
-        const transformedData = parsedData.map(row => ({
-            round: safeParseInt(row['회차']),
-            set: safeParseInt(row['세트']),
-            game: safeParseInt(row['게임']),
-            oddEven: safeParseInt(row['홀짝']),
-            sequence: safeParseInt(row['연속']),
-            hotCold: safeParseInt(row['핫콜']),
-            gameMode: String(row['게임선택'] || ''),
-            numbers: extractLottoNumbers({
-                번호1: row['선택1'], 번호2: row['선택2'], 번호3: row['선택3'],
-                번호4: row['선택4'], 번호5: row['선택5'], 번호6: row['선택6']
-            })
-        }));
-        const result = transformedData.filter(item => item.round >= MIN_ROUND && item.numbers.length === LOTTO_NUMBER_COUNT);
-        return result;
-    } catch (error) {
-        console.error('[로또] Lotto023.xlsx 로드 실패:', error);
-        return [];
-    }
-};
-
-/** 모든 로또 번호 반환 (1부터 최대번호까지) */
-const getAllNumbers = () => {
-    const maxNumber = (typeof LOTTO_CONSTANTS !== 'undefined' && LOTTO_CONSTANTS.MAX_NUMBER) || DEFAULT_MAX_NUMBER;
-    return Array.from({ length: maxNumber }, (_, i) => i + 1);
-};
-
-/** 숫자 배열 정렬 */
-const sortNumbers = (numbers) => [...numbers].sort((a, b) => a - b);
-
-/** 홀수/짝수 번호 분리 */
-const getOddEvenNumbers = () => {
-    const allNumbers = getAllNumbers();
-    return {
-        odd: allNumbers.filter(n => n % 2 === 1),
-        even: allNumbers.filter(n => n % 2 === 0)
-    };
-};
-
-/**
- * 통계 모듈
- * CSV 데이터를 기반으로 로또 통계를 계산하는 함수들
- */
-
-/**
- * 번호별 당첨 횟수 계산 (보너스 제외)
- * @param {Array} lottoData - 로또 데이터 배열
- * @returns {Map<number, number>} 번호별 당첨 횟수 맵
- */
-function calculateWinStats(lottoData) {
-    const statsMap = new Map();
-
-    // 모든 번호 초기화
-    for (let i = 1; i <= LOTTO_CONSTANTS.MAX_NUMBER; i++) {
-        statsMap.set(i, 0);
-    }
-
-    // 당첨 번호만 카운트 (보너스 제외)
-    lottoData.forEach(round => {
-        round.numbers.forEach(num => {
-            if (num >= 1 && num <= LOTTO_CONSTANTS.MAX_NUMBER) {
-                statsMap.set(num, (statsMap.get(num) || 0) + 1);
-            }
-        });
-    });
-
-    return statsMap;
-}
-
-/**
- * 번호별 출현 횟수 계산 (보너스 포함)
- * @param {Array} lottoData - 로또 데이터 배열
- * @returns {Map<number, number>} 번호별 출현 횟수 맵
- */
-function calculateAppearanceStats(lottoData) {
-    const statsMap = new Map();
-
-    // 모든 번호 초기화
-    for (let i = 1; i <= LOTTO_CONSTANTS.MAX_NUMBER; i++) {
-        statsMap.set(i, 0);
-    }
-
-    // 당첨 번호 + 보너스 번호 카운트
-    lottoData.forEach(round => {
-        // 당첨 번호 카운트
-        round.numbers.forEach(num => {
-            if (num >= 1 && num <= LOTTO_CONSTANTS.MAX_NUMBER) {
-                statsMap.set(num, (statsMap.get(num) || 0) + 1);
-            }
-        });
-        // 보너스 번호 카운트
-        if (round.bonus && round.bonus >= 1 && round.bonus <= LOTTO_CONSTANTS.MAX_NUMBER) {
-            statsMap.set(round.bonus, (statsMap.get(round.bonus) || 0) + 1);
-        }
-    });
-
-    return statsMap;
-}
-
-/**
- * 번호별 출현 비율 계산 (퍼센트)
- * @param {Map<number, number>} winStatsMap - 번호별 당첨 횟수 맵
- * @param {number} totalRounds - 전체 회차 수
- * @returns {Map<number, number>} 번호별 출현 비율 맵 (퍼센트)
- */
-function calculatePercentageStats(winStatsMap, totalRounds) {
-    const percentageMap = new Map();
-
-    if (totalRounds === 0) {
-        for (let i = 1; i <= LOTTO_CONSTANTS.MAX_NUMBER; i++) {
-            percentageMap.set(i, 0);
-        }
-        return percentageMap;
-    }
-
-    winStatsMap.forEach((count, number) => {
-        const percentage = (count / totalRounds) * 100;
-        percentageMap.set(number, percentage);
-    });
-
-    return percentageMap;
-}
+// getAllNumbers, sortNumbers, getOddEvenNumbers 등은 generator.js 또는 statistics.js의 기능을 사용하거나, 
+// app.js 내부에서 필요한 최소한의 유틸리티만 남겨둡니다. 
+// (주의: generator.js의 함수들은 전역으로 노출되지 않았을 수 있으므로 확인 필요. 
+// 하지만 현재 구조상 script 태그로 로드하므로 전역에 있을 가능성이 높음.
+// 안전을 위해, app.js에서 *내부적으로만* 쓰이는 간단한 유틸리티는 남겨두거나, 
+// generator.js가 전역으로 노출하는 함수명과 겹치지 않게 주의해야 함.
+// 여기서는 `calculateWinStats` 등 statistics.js와 명확히 겹치는 함수들을 제거합니다.)
 
 /**
  * 통계 데이터 초기화
  * @param {Array} lottoData - 로또 데이터 배열
  */
 function initializeStats(lottoData) {
+    if (!lottoData) return;
+
     // 회차별 당첨번호는 이 데이터만 사용 (Lotto645.xlsx 전용, API 병합 없음)
     AppState.allLotto645Data = lottoData;
     AppState.currentStatsRounds = lottoData || [];
+
+    // 회차 및 합계 범위 설정
     if (lottoData.length > 0) {
-        var rounds = lottoData.map(function (r) { return Number(r.round); }).filter(function (n) { return !isNaN(n); });
+        const rounds = lottoData.map(r => r && r.round ? Number(r.round) : NaN).filter(n => !isNaN(n));
         if (rounds.length > 0) {
-            AppState.startRound = Math.min.apply(null, rounds);
-            AppState.endRound = Math.max.apply(null, rounds);
+            AppState.startRound = Math.min(...rounds);
+            AppState.endRound = Math.max(...rounds);
         }
-        var sums = lottoData.map(function (r) {
-            var nums = r.numbers || [];
-            return nums.reduce(function (a, b) { return a + Number(b); }, 0);
-        }).filter(function (n) { return !isNaN(n) && n >= 21 && n <= 255; });
+
+        const sums = lottoData.map(r => {
+            const nums = (r && Array.isArray(r.numbers)) ? r.numbers : [];
+            return nums.length > 0 ? nums.reduce((a, b) => a + (Number(b) || 0), 0) : NaN;
+        }).filter(n => !isNaN(n) && n >= 21 && n <= 255);
+
         if (sums.length > 0) {
-            AppState.sumRangeStart = Math.min.apply(null, sums);
-            AppState.sumRangeEnd = Math.max.apply(null, sums);
+            AppState.sumRangeStart = Math.min(...sums);
+            AppState.sumRangeEnd = Math.max(...sums);
         }
     }
 
-    // 당첨 통계 계산 (보너스 제외)
-    AppState.winStatsMap = calculateWinStats(lottoData);
-    AppState.winStats = Array.from(AppState.winStatsMap.entries())
-        .map(([number, count]) => ({ number, count }))
-        .sort((a, b) => a.number - b.number);
+    // statistics.js의 initializeStatistics 함수를 사용하여 통계 계산
+    if (typeof initializeStatistics === 'function') {
+        const stats = initializeStatistics(lottoData, LOTTO_CONSTANTS.MAX_NUMBER);
 
-    // 출현 통계 계산 (보너스 포함)
-    AppState.appearanceStatsMap = calculateAppearanceStats(lottoData);
+        // AppState 업데이트
+        AppState.winStatsMap = stats.winStatsMap;
+        AppState.appearanceStatsMap = stats.appearanceStatsMap;
+        AppState.winPercentageCache = stats.winPercentageMap;
+        AppState.appearancePercentageCache = stats.appearancePercentageMap;
+        AppState.overallHotColdCache = stats.hotCold;
 
-    // 당첨 비율 계산 (보너스 제외)
-    const winPercentageMap = calculatePercentageStats(AppState.winStatsMap, lottoData.length);
-    AppState.winPercentageCache = winPercentageMap;
+        // winStats 배열 생성 (정렬)
+        AppState.winStats = Array.from(AppState.winStatsMap.entries())
+            .map(([number, count]) => ({ number, count }))
+            .sort((a, b) => a.number - b.number);
 
-    // 출현 비율 계산 (보너스 포함)
-    const appearancePercentageMap = calculatePercentageStats(AppState.appearanceStatsMap, lottoData.length);
-    AppState.appearancePercentageCache = appearancePercentageMap;
+        // 기존 호환성을 위해 avgPercentageCache 설정
+        AppState.avgPercentageCache = stats.winPercentageMap;
+    } else {
+        console.error('initializeStatistics function not found in statistics.js');
+    }
 
-    // 기존 호환성을 위해 avgPercentageCache는 당첨 비율로 설정
-    AppState.avgPercentageCache = winPercentageMap;
-
-    // 평균 횟수 캐시
+    // 평균 횟수 캐시 계산
     const avgCount = lottoData.length > 0
-        ? lottoData.reduce((sum, round) => sum + round.numbers.length, 0) / (lottoData.length * LOTTO_CONSTANTS.SET_SIZE)
+        ? lottoData.reduce((sum, round) => sum + (round.numbers ? round.numbers.length : 0), 0) / (lottoData.length * LOTTO_CONSTANTS.SET_SIZE)
         : 0;
     AppState.avgCountCache = avgCount;
 
     // 현재 통계 업데이트
     updateCurrentStats();
-
-    // 전체 핫콜 캐시 초기화
-    AppState.overallHotColdCache = null;
 
     // 월별 평균 차트 렌더링 추가
     if (typeof renderMonthlyAverageChart === 'function') {
@@ -479,6 +136,14 @@ function sortByStat(numbers, byCount = true, descending = true) {
             return valueA - valueB;
         }
     });
+}
+
+/**
+ * 모든 로또 번호 (1~45) 배열 반환
+ * @returns {Array} 1부터 45까지의 숫자 배열
+ */
+function getAllNumbers() {
+    return Array.from({ length: LOTTO_CONSTANTS.MAX_NUMBER }, (_, i) => i + 1);
 }
 
 /**
@@ -650,37 +315,47 @@ function getFilteredPool() {
     const pool = getAllNumbers();
     let filteredPool = pool;
 
-    const isCount = isCountFilter(activeFilters.statFilter);
-    const isPercentage = isPercentageFilter(activeFilters.statFilter);
+    const isCount = isCountFilter(AppState.activeFilters.statFilter);
+    const isPercentage = isPercentageFilter(AppState.activeFilters.statFilter);
 
     if (isCount || isPercentage) {
         const highCountNumbers = new Set(getFilteredNumbersByCount(true));
         filteredPool = filteredPool.filter(n => highCountNumbers.has(n));
         if (isCount) {
-            const descending = activeFilters.statFilter === "count-desc";
+            const descending = AppState.activeFilters.statFilter === "count-desc";
             sortByStat(filteredPool, true, descending);
         } else {
-            const descending = activeFilters.statFilter === "percentage-desc";
+            const descending = AppState.activeFilters.statFilter === "percentage-desc";
             sortByStat(filteredPool, false, descending);
         }
     }
 
-    filteredPool = applyOddEvenFilter(filteredPool, activeFilters.oddEven);
-    if (canApplyHotColdFilter(activeFilters.statFilter)) {
-        filteredPool = applyHotColdFilter(filteredPool, activeFilters.hotCold);
+    filteredPool = applyOddEvenFilter(filteredPool, AppState.activeFilters.oddEven);
+    if (canApplyHotColdFilter(AppState.activeFilters.statFilter)) {
+        filteredPool = applyHotColdFilter(filteredPool, AppState.activeFilters.hotCold);
     }
 
     return filteredPool;
 }
 
 function getOddEvenTargetCounts() {
-    if (activeFilters.oddEven === "odd") return { oddCount: 4, evenCount: 2 };
-    if (activeFilters.oddEven === "even") return { oddCount: 2, evenCount: 4 };
-    if (activeFilters.oddEven === "balanced") return { oddCount: 3, evenCount: 3 };
+    if (AppState.activeFilters.oddEven === "odd") return { oddCount: 4, evenCount: 2 };
+    if (AppState.activeFilters.oddEven === "even") return { oddCount: 2, evenCount: 4 };
+    if (AppState.activeFilters.oddEven === "balanced") return { oddCount: 3, evenCount: 3 };
     return null;
 }
 
 // selectNumbersWithOddEvenRatio는 game-logic.js에서 가져옴
+
+function getOddEvenNumbers() {
+    const odd = [];
+    const even = [];
+    for (let i = 1; i <= 45; i++) {
+        if (i % 2 === 0) even.push(i);
+        else odd.push(i);
+    }
+    return { odd, even };
+}
 
 function applyOddEvenFilter(numbers, oddEvenFilter) {
     if (numbers.length === 0 || oddEvenFilter === "none") {
@@ -712,16 +387,11 @@ function applyHotColdFilter(numbers, hotColdFilter) {
     return numbers;
 }
 
-function isPreferredNumberFilter(statFilter) {
-    return statFilter === "none" || statFilter === "auto";
-}
-
-function isStatNumberFilter(statFilter) {
-    return statFilter !== "none" && statFilter !== "auto";
-}
-
 function canApplyHotColdFilter(statFilter) {
-    return statFilter === "none" || statFilter === "auto";
+    if (statFilter === 'none') {
+        return false;
+    }
+    return isCountFilter(AppState.activeFilters.statFilter);
 }
 
 function isCountFilter(statFilter) {
@@ -734,10 +404,6 @@ function isPercentageFilter(statFilter) {
 
 function isStatFilter(statFilter) {
     return isCountFilter(statFilter) || isPercentageFilter(statFilter);
-}
-
-function isStatCountFilter() {
-    return isCountFilter(activeFilters.statFilter);
 }
 
 /**
@@ -875,14 +541,14 @@ function pickSix() {
     const poolSet = new Set(pool);
     let filteredPool = pool;
 
-    if (isStatFilter(activeFilters.statFilter)) {
+    if (isStatFilter(AppState.activeFilters.statFilter)) {
         const highCountNumbers = new Set(getFilteredNumbersByCount(true));
         filteredPool = pool.filter(n => highCountNumbers.has(n));
     }
 
     // 핫콜 필터: 수동선택 또는 자동선택 모드에서만 적용
-    if (canApplyHotColdFilter(activeFilters.statFilter)) {
-        filteredPool = applyHotColdFilter(filteredPool, activeFilters.hotCold);
+    if (canApplyHotColdFilter(AppState.activeFilters.statFilter)) {
+        filteredPool = applyHotColdFilter(filteredPool, AppState.activeFilters.hotCold);
     }
 
     const filteredPoolSet = new Set(filteredPool);
@@ -906,218 +572,6 @@ function findSequentialPairs(numbers) {
         }
     }
     return pairs;
-}
-
-/**
- * 홀짝/핫콜 비율을 모두 고려하여 번호 선택
- */
-function selectNumbersWithOddEvenAndHotColdRatio(pool, existingNumbers, totalNeeded, targetCounts, hotColdFilter, hotSet, coldSet) {
-    const result = [...existingNumbers];
-    const resultSet = new Set(result);
-    const availablePool = pool.filter(n => !resultSet.has(n));
-
-    // 홀짝/핫콜 비율 제한이 없으면 랜덤으로 선택
-    if (!targetCounts && (!hotColdFilter || hotColdFilter === "none")) {
-        const shuffled = [...availablePool].sort(() => Math.random() - 0.5);
-        for (let i = 0; i < shuffled.length && result.length < totalNeeded; i++) {
-            result.push(shuffled[i]);
-        }
-        return result.slice(0, totalNeeded);
-    }
-
-    // 목표 비율 계산
-    let targetOdd = 0;
-    let targetEven = 0;
-    if (targetCounts) {
-        targetOdd = targetCounts.oddCount;
-        targetEven = targetCounts.evenCount;
-    }
-
-    let targetHot = 0;
-    let targetCold = 0;
-    if (hotColdFilter && hotColdFilter !== "none") {
-        const targetRatio = HOT_COLD_RATIO_MAP[hotColdFilter];
-        if (targetRatio) {
-            targetHot = targetRatio.hot;
-            targetCold = targetRatio.cold;
-        }
-    }
-
-    // 기존 번호에서 개수 계산
-    let currentOdd = existingNumbers.filter(n => n % 2 === 1).length;
-    let currentEven = existingNumbers.filter(n => n % 2 === 0).length;
-    let currentHot = existingNumbers.filter(n => hotSet.has(n)).length;
-    let currentCold = existingNumbers.filter(n => coldSet.has(n)).length;
-
-    // 필요 개수 계산
-    let needOdd = 0;
-    let needEven = 0;
-    let needHot = 0;
-    let needCold = 0;
-
-    if (targetCounts) {
-        // 홀짝 비율이 있는 경우: 정확히 목표 비율에 맞춤
-        needOdd = Math.max(0, targetOdd - currentOdd);
-        needEven = Math.max(0, targetEven - currentEven);
-    } else {
-        // 홀짝 비율이 없는 경우: 전체 개수에서 기존 개수 빼기
-        const remaining = totalNeeded - existingNumbers.length;
-        needOdd = remaining;
-        needEven = remaining;
-    }
-
-    if (hotColdFilter && hotColdFilter !== "none") {
-        // 핫콜 비율이 있는 경우: 정확히 목표 비율에 맞춤
-        needHot = Math.max(0, targetHot - currentHot);
-        needCold = Math.max(0, targetCold - currentCold);
-    }
-
-    // 풀을 홀짝/핫콜로 분류
-    const oddHotPool = availablePool.filter(n => n % 2 === 1 && hotSet.has(n));
-    const oddColdPool = availablePool.filter(n => n % 2 === 1 && coldSet.has(n));
-    const evenHotPool = availablePool.filter(n => n % 2 === 0 && hotSet.has(n));
-    const evenColdPool = availablePool.filter(n => n % 2 === 0 && coldSet.has(n));
-
-    // 셔플
-    const shuffledOddHot = [...oddHotPool].sort(() => Math.random() - 0.5);
-    const shuffledOddCold = [...oddColdPool].sort(() => Math.random() - 0.5);
-    const shuffledEvenHot = [...evenHotPool].sort(() => Math.random() - 0.5);
-    const shuffledEvenCold = [...evenColdPool].sort(() => Math.random() - 0.5);
-
-    // 비율에 맞춰 선택
-    let oddHotIdx = 0, oddColdIdx = 0, evenHotIdx = 0, evenColdIdx = 0;
-
-    // 핫콜 필터가 있는 경우 핫콜 비율을 정확히 맞춤
-    if (hotColdFilter && hotColdFilter !== "none") {
-        // 핫콜 비율에 맞춰 선택 (핫 4개, 콜 2개 등)
-        while (result.length < totalNeeded && (needHot > 0 || needCold > 0)) {
-            let selected = false;
-
-            // 핫이 더 많이 필요하면 핫 우선 선택
-            if (needHot > needCold && needHot > 0) {
-                // 홀짝 필터가 있으면 홀짝 비율도 고려
-                if (targetCounts && needOdd > 0 && oddHotIdx < shuffledOddHot.length) {
-                    const num = shuffledOddHot[oddHotIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needOdd--;
-                    needHot--;
-                    selected = true;
-                } else if (targetCounts && needEven > 0 && evenHotIdx < shuffledEvenHot.length) {
-                    const num = shuffledEvenHot[evenHotIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needEven--;
-                    needHot--;
-                    selected = true;
-                } else if (!targetCounts && oddHotIdx < shuffledOddHot.length) {
-                    // 홀짝 필터가 없으면 핫만 고려
-                    const num = shuffledOddHot[oddHotIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needHot--;
-                    selected = true;
-                } else if (!targetCounts && evenHotIdx < shuffledEvenHot.length) {
-                    const num = shuffledEvenHot[evenHotIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needHot--;
-                    selected = true;
-                }
-            }
-            // 콜이 더 많이 필요하거나 핫과 같으면 콜 우선 선택
-            else if (needCold > 0) {
-                if (targetCounts && needOdd > 0 && oddColdIdx < shuffledOddCold.length) {
-                    const num = shuffledOddCold[oddColdIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needOdd--;
-                    needCold--;
-                    selected = true;
-                } else if (targetCounts && needEven > 0 && evenColdIdx < shuffledEvenCold.length) {
-                    const num = shuffledEvenCold[evenColdIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needEven--;
-                    needCold--;
-                    selected = true;
-                } else if (!targetCounts && oddColdIdx < shuffledOddCold.length) {
-                    const num = shuffledOddCold[oddColdIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needCold--;
-                    selected = true;
-                } else if (!targetCounts && evenColdIdx < shuffledEvenCold.length) {
-                    const num = shuffledEvenCold[evenColdIdx++];
-                    result.push(num);
-                    resultSet.add(num);
-                    needCold--;
-                    selected = true;
-                }
-            }
-
-            if (!selected) {
-                // 핫콜 비율을 맞출 수 없으면 남은 풀에서 선택
-                const remaining = availablePool.filter(n => !resultSet.has(n));
-                if (remaining.length > 0) {
-                    const shuffled = [...remaining].sort(() => Math.random() - 0.5);
-                    result.push(shuffled[0]);
-                    resultSet.add(shuffled[0]);
-                    // 선택한 번호의 속성에 따라 need 값 조정
-                    if (hotSet.has(shuffled[0]) && needHot > 0) needHot--;
-                    if (coldSet.has(shuffled[0]) && needCold > 0) needCold--;
-                    if (targetCounts) {
-                        if (shuffled[0] % 2 === 1 && needOdd > 0) needOdd--;
-                        if (shuffled[0] % 2 === 0 && needEven > 0) needEven--;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-    }
-
-    // 남은 자리를 홀짝 비율에 맞춰 채우기 (핫콜 필터가 없거나 핫콜 비율을 이미 맞춘 경우)
-    while (result.length < totalNeeded) {
-        let selected = false;
-
-        if (targetCounts) {
-            // 홀짝 비율 우선
-            if (needOdd > 0) {
-                const remainingOdd = availablePool.filter(n => !resultSet.has(n) && n % 2 === 1);
-                if (remainingOdd.length > 0) {
-                    const shuffled = [...remainingOdd].sort(() => Math.random() - 0.5);
-                    result.push(shuffled[0]);
-                    resultSet.add(shuffled[0]);
-                    needOdd--;
-                    selected = true;
-                }
-            } else if (needEven > 0) {
-                const remainingEven = availablePool.filter(n => !resultSet.has(n) && n % 2 === 0);
-                if (remainingEven.length > 0) {
-                    const shuffled = [...remainingEven].sort(() => Math.random() - 0.5);
-                    result.push(shuffled[0]);
-                    resultSet.add(shuffled[0]);
-                    needEven--;
-                    selected = true;
-                }
-            }
-        }
-
-        if (!selected) {
-            // 남은 풀에서 선택
-            const remaining = availablePool.filter(n => !resultSet.has(n));
-            if (remaining.length > 0) {
-                const shuffled = [...remaining].sort(() => Math.random() - 0.5);
-                result.push(shuffled[0]);
-                resultSet.add(shuffled[0]);
-            } else {
-                break;
-            }
-        }
-    }
-
-    return result.slice(0, totalNeeded);
 }
 
 /**
@@ -1209,10 +663,6 @@ function createPlusSign(style = "color: #ffd54f; font-weight: bold; margin: 0 2p
     plus.textContent = "+";
     return plus;
 }
-/** 단일 번들: 필수 함수는 이미 로드됨 */
-async function waitForRequiredFunctions() {
-    return true;
-}
 
 /**
  * 애플리케이션 초기화 함수
@@ -1232,9 +682,6 @@ async function initializeApp() {
             return;
         }
 
-        // 필수 함수가 로드될 때까지 대기
-        await waitForRequiredFunctions();
-
         // 함수 참조 가져오기 (window 객체 또는 전역 스코프)
         const loadFunc = (typeof window !== 'undefined' && window.loadLotto645Data)
             ? window.loadLotto645Data
@@ -1248,21 +695,21 @@ async function initializeApp() {
         // Excel(예: 최종 1200회)과 달리 1201~1209회가 보일 수 있으므로, 로드 시 Lotto645 관련
         // localStorage 키를 제거해 두어 항상 서버의 Lotto645.xlsx만 읽어오도록 함.
         try {
-            var keysToRemove = [];
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
                 if (key && /lotto645|Lotto645|allLotto645|회차별당첨/i.test(key)) keysToRemove.push(key);
             }
-            keysToRemove.forEach(function (k) { localStorage.removeItem(k); });
+            keysToRemove.forEach(k => { localStorage.removeItem(k); });
             if (keysToRemove.length > 0) { /* Lotto645 관련 localStorage 키 제거 */ }
         } catch (e) { /* localStorage 비활성화 등 무시 */ }
 
-        // XLSX 파일에서 데이터 로드 (서버 경로: /source/Lotto645.xlsx)
+        // XLSX 파일에서 데이터 로드 (서버 경로: /.source/Lotto645.xlsx)
         const lotto645Data = await loadFunc();
         // 서버의 Lotto645.xlsx 실제 행 수와 비교해 캐시 여부 검증
         try {
-            var metaRes = await fetch(getApiBaseUrl() + '/api/lotto645-meta', { cache: 'no-store' });
-            var meta = await metaRes.json().catch(function () { return {}; });
+            const metaRes = await fetch(getApiBaseUrl() + '/api/lotto645-meta', { cache: 'no-store' });
+            const meta = await metaRes.json().catch(() => ({}));
             if (meta.dataRows != null && meta.dataRows !== lotto645Data.length) {
                 alert('회차별 당첨번호가 서버 데이터와 다릅니다.\n서버: ' + meta.dataRows + '회차, 수신: ' + lotto645Data.length + '건\n캐시를 비우고 강력 새로고침(Ctrl+Shift+R) 해 주세요.');
             }
@@ -1276,10 +723,14 @@ async function initializeApp() {
 
         // 통계 초기화 (AppState.startRound, endRound 설정 포함)
         initializeStats(lotto645Data);
+
+        // [Fix] 초기 화면 렌더링 (로딩 메시지 제거)
+        if (typeof renderStats === 'function') renderStats(lotto645Data);
+        if (typeof updateRoundRangeDisplay === 'function') updateRoundRangeDisplay();
         // 동행복권 최신 추첨정보
         try {
-            var latestRes = await fetch(getApiBaseUrl() + '/api/lotto-latest', { cache: 'no-store' });
-            var latestData = await latestRes.json().catch(function () { return {}; });
+            const latestRes = await fetch(getApiBaseUrl() + '/api/lotto-latest', { cache: 'no-store' });
+            const latestData = await latestRes.json().catch(() => ({}));
             if (latestData.returnValue === 'success' && latestData.drwNo != null) {
                 AppState.latestRoundApi = latestData.drwNo;
                 AppState.latestRoundDateApi = latestData.drwNoDate || '';
@@ -1287,24 +738,24 @@ async function initializeApp() {
         } catch (e) { /* 무시 */ }
         // Lotto645.xlsx 1회~동행복권 최신회차 검증, 누락 회차 있으면 서버에서 Excel 보완 (sync-lotto645)
         if (lotto645Data.length > 0 && AppState.latestRoundApi != null && AppState.endRound != null && AppState.latestRoundApi > AppState.endRound) {
-            var missingCount = AppState.latestRoundApi - AppState.endRound;
-            var base = getApiBaseUrl();
+            const missingCount = AppState.latestRoundApi - AppState.endRound;
+            const base = getApiBaseUrl();
             try {
                 // 누락이 소수(예: 9회)일 때만 fetch-missing-rounds 호출. 대량(예: 1200회)이면 URL/부하 방지를 위해 생략하고 sync만 호출
                 if (missingCount > 0 && missingCount <= 100) {
-                    var missingRounds = [];
-                    for (var r = AppState.endRound + 1; r <= AppState.latestRoundApi; r++) missingRounds.push(r);
+                    const missingRounds = [];
+                    for (let r = AppState.endRound + 1; r <= AppState.latestRoundApi; r++) missingRounds.push(r);
                     await fetch(base + '/api/fetch-missing-rounds?rounds=' + missingRounds.join(','), { cache: 'no-store' });
                 }
-                var syncRes = await fetch(base + '/api/sync-lotto645', { method: 'POST', cache: 'no-store' });
-                var syncData = await syncRes.json().catch(function () { return {}; });
+                const syncRes = await fetch(base + '/api/sync-lotto645', { method: 'POST', cache: 'no-store' });
+                const syncData = await syncRes.json().catch(() => ({}));
                 if (syncData.returnValue === 'success' && syncData.added > 0) {
-                    var newData = await loadFunc();
+                    const newData = await loadFunc();
                     if (newData && newData.length > 0) {
                         initializeStats(newData);
-                        var endInput = document.getElementById('endDate');
+                        const endInput = document.getElementById('endDate');
                         if (endInput && AppState.latestRoundDateApi) {
-                            var apiDateObj = parseDate(String(AppState.latestRoundDateApi).trim());
+                            const apiDateObj = parseDate(String(AppState.latestRoundDateApi).trim());
                             if (apiDateObj && apiDateObj instanceof Date && !isNaN(apiDateObj.getTime())) {
                                 endInput.value = formatDateYYMMDD(apiDateObj);
                             }
@@ -1332,11 +783,11 @@ async function initializeApp() {
             }
             // 종료일: 동행복권 최신 당첨회차 날짜 (API 있으면 사용, 없으면 Excel 최신)
             if (AppState.latestRoundDateApi) {
-                var apiDateObj = parseDate(String(AppState.latestRoundDateApi).trim());
+                const apiDateObj = parseDate(String(AppState.latestRoundDateApi).trim());
                 if (apiDateObj && apiDateObj instanceof Date && !isNaN(apiDateObj.getTime())) {
                     endDateInput.value = formatDateYYMMDD(apiDateObj);
                 } else {
-                    endDateInput.value = String(AppState.latestRoundDateApi).slice(0, 10).replace(/(\d{4})-(\d{2})-(\d{2})/, function (_, y, m, d) { return y + '/' + m + '/' + d; });
+                    endDateInput.value = String(AppState.latestRoundDateApi).slice(0, 10).replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, d) => `${y}/${m}/${d}`);
                 }
             } else {
                 const lastRound = lotto645Data[0];
@@ -1344,7 +795,7 @@ async function initializeApp() {
                     const lastDate = parseDate(lastRound.date);
                     endDateInput.value = formatDateYYMMDD(lastDate);
                 } else {
-                    var today = new Date();
+                    const today = new Date();
                     endDateInput.value = formatDateYYMMDD(today);
                 }
             }
@@ -1614,34 +1065,34 @@ async function initializeApp() {
         // 게임박스 초기화
         initializeGameBox();
         // 구간선택 기본값 반영 및 3자리만 입력·가운데 정렬
-        var sumStartEl = document.getElementById('sumRangeStart');
-        var sumEndEl = document.getElementById('sumRangeEnd');
+        const sumStartEl = document.getElementById('sumRangeStart');
+        const sumEndEl = document.getElementById('sumRangeEnd');
         if (sumStartEl && AppState.sumRangeStart != null) sumStartEl.value = AppState.sumRangeStart;
         if (sumEndEl && AppState.sumRangeEnd != null) sumEndEl.value = AppState.sumRangeEnd;
-        [sumStartEl, sumEndEl].forEach(function (el) {
+        [sumStartEl, sumEndEl].forEach(el => {
             if (!el) return;
             el.style.textAlign = 'center';
             el.addEventListener('input', function () {
-                var v = String(this.value).replace(/\D/g, '').slice(0, 3);
+                const v = String(this.value).replace(/\D/g, '').slice(0, 3);
                 this.value = v === '' ? '' : (parseInt(v, 10) > 255 ? 255 : v);
             });
         });
         // 회차별 당첨번호 합계필터 (999 또는 000=전체, 21~255=동일합계 회차)
-        var sumFilterRoundEl = document.getElementById('sumFilterRound');
+        const sumFilterRoundEl = document.getElementById('sumFilterRound');
         if (sumFilterRoundEl) {
             sumFilterRoundEl.style.textAlign = 'center';
             sumFilterRoundEl.addEventListener('input', function () {
-                var v = String(this.value).replace(/\D/g, '').slice(0, 3);
+                const v = String(this.value).replace(/\D/g, '').slice(0, 3);
                 this.value = v === '' ? '999' : v;
             });
-            sumFilterRoundEl.addEventListener('change', function () {
+            sumFilterRoundEl.addEventListener('change', () => {
                 if (AppState.currentViewNumbersBaseData && typeof renderViewNumbersList === 'function') {
                     renderViewNumbersList(AppState.currentViewNumbersBaseData);
                 }
             });
         }
         // 저장 회차 기본값 (최종회차+1)
-        var saveRoundEl = document.getElementById('saveRound');
+        const saveRoundEl = document.getElementById('saveRound');
         if (saveRoundEl && AppState.endRound != null) saveRoundEl.value = AppState.endRound + 1;
 
         // 정렬 버튼 설정
@@ -1673,11 +1124,11 @@ async function initializeApp() {
                 if (titleEl) {
                     if (data.startTime) {
                         const timeSpan = document.createElement('span');
-                        timeSpan.style.fontSize = '0.4em';
-                        timeSpan.style.fontWeight = 'normal';
-                        timeSpan.style.marginLeft = '10px';
+                        timeSpan.style.fontSize = '0.65rem';
+                        timeSpan.style.fontWeight = 'bold';
+                        timeSpan.style.marginLeft = '12px';
                         timeSpan.style.color = '#ffffff';
-                        timeSpan.textContent = ` (Server started: ${data.startTime})`;
+                        timeSpan.textContent = ` (로딩시간: ${data.startTime})`;
                         titleEl.appendChild(timeSpan);
                     }
 
@@ -1700,6 +1151,8 @@ async function initializeApp() {
                                 });
                         }
                     });
+
+
                 }
             })
             .catch(err => { /* Server time fetch failed */ });
@@ -1829,6 +1282,8 @@ function renderNumberGrid() {
     gridContainer.style.display = 'grid';
     gridContainer.style.gridTemplateColumns = 'repeat(9, 1fr)';
     gridContainer.style.gap = 'clamp(3px, 0.8vw, 6px)';
+    gridContainer.style.placeItems = 'center';
+    gridContainer.style.justifyContent = 'center';
 
     // 당첨순 상위 6개 번호 찾기 (정렬된 순서 기준)
     const sortedByWin = [...sortedStats].sort((a, b) => b.count - a.count);
@@ -2292,7 +1747,18 @@ function initializeGameBox() {
             }
             this.dataset.mode = newMode;
             this.textContent = newText;
-            updateGameSet(i, newMode);
+
+            var cb = document.getElementById(`gameCheckbox${i}`);
+            if (newMode === 'manual') {
+                if (!AppState.setSelectedBalls) AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
+                AppState.setSelectedBalls[i - 1] = [];
+                if (cb) cb.checked = false;
+            } else if (newMode === 'auto') {
+                if (cb) cb.checked = true;
+            } else if (newMode === 'semi-auto') {
+                if (cb) cb.checked = false;
+            }
+            updateGameSet(i, newMode, true);
         });
 
         // 게임공 컨테이너 (한 라인으로, 스크롤 없음)
@@ -2321,36 +1787,33 @@ function initializeGameBox() {
             const currentMode = modeBtn ? modeBtn.dataset.mode : 'manual';
 
             if (this.checked) {
-                // 체크박스 체크 시: 모드 버튼 비활성화 (저장 준비)
-                if (modeBtn) modeBtn.disabled = true;
-                if (currentMode === 'manual') {
-                    const numbers = AppState.setSelectedBalls[gameIndex - 1] || [];
-                    const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+                let numbers = AppState.setSelectedBalls[gameIndex - 1] || [];
+                let validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+
+                if (currentMode === 'manual' || currentMode === 'auto') {
                     if (validNumbers.length !== 6) {
                         alert('6개의 번호를 모두 선택해주세요.');
                         this.checked = false;
-                        if (modeBtn) modeBtn.disabled = false;
+                        return;
+                    }
+                } else if (currentMode === 'semi-auto') {
+                    // 반자동은 게임공이 1개 이상 5개 이하일 경우 체크 시 나머지 자동 생성
+                    if (validNumbers.length >= 1 && validNumbers.length <= 5) {
+                        const fullNumbers = generateNumbersWithFilters(validNumbers, true);
+                        const newNumbers = fullNumbers.filter(n => !validNumbers.includes(n));
+                        const allNumbers = [...validNumbers, ...newNumbers].slice(0, 6).sort((a, b) => a - b);
+                        AppState.setSelectedBalls[gameIndex - 1] = allNumbers;
+                        updateGameSet(gameIndex, 'semi-auto');
+                    } else if (validNumbers.length === 6) {
+                        // 이미 6개면 그냥 체크만 됨
+                    } else if (validNumbers.length === 0) {
+                        alert('반자동 모드는 1개 이상의 번호를 선택해야 합니다.');
+                        this.checked = false;
                         return;
                     }
                 }
             } else {
-                // 체크박스 해제 시: 모드 버튼 활성화
-                if (modeBtn) modeBtn.disabled = false;
-                if (currentMode === 'auto') {
-                    // 자동 모드: 옵션필터 조건으로 게임공 재생성
-                    generateGame(gameIndex, 'auto');
-                } else if (currentMode === 'manual') {
-                    // 수동 모드: 선택공 초기화
-                    if (!AppState.setSelectedBalls) {
-                        AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
-                    }
-                    AppState.setSelectedBalls[gameIndex - 1] = [];
-                    var cb = document.getElementById('gameCheckbox' + gameIndex);
-                    if (cb) cb.disabled = true;
-                    updateGameSet(gameIndex, 'manual');
-                } else if (currentMode === 'semi-auto') {
-                    // 반자동 모드: 체크박스만 해제
-                }
+                // 해제 시 어떠한 상태 초기화나 버튼 비활성화도 하지 않고 그대로 유지
             }
 
             updateSaveBoxState();
@@ -2567,6 +2030,17 @@ function handleManualBallClick(gameIndex, ballIndex) {
         updateGameSet(gameIndex, currentMode);
         // 합계 업데이트 (updateGameSet 내부에서도 하지만, 여기서도 명시적으로)
         updateGameSum(gameIndex, numbers);
+
+        // 체크박스 상태 업데이트
+        const checkbox = document.getElementById(`gameCheckbox${gameIndex}`);
+        if (checkbox) {
+            const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+            if (validNumbers.length < 6) {
+                checkbox.checked = false;
+                checkbox.disabled = true;
+            }
+        }
+        updateSaveBoxState();
         return;
     }
 
@@ -2621,48 +2095,135 @@ function handleSelectBallClick(number) {
 
     // 반자동 모드인 경우 선택공으로 교체
     if (currentMode === 'semi-auto') {
-        const selectingBall = document.querySelector(`#gameBalls${currentSelectingGameIndex} > div:nth-child(${currentSelectingBallIndex + 1})`);
-        if (selectingBall) {
+        const selectingBallElement = document.querySelector(`#gameBalls${currentSelectingGameIndex} > div[data-ball-index="${currentSelectingBallIndex}"]`);
+        if (selectingBallElement) {
             // 선택공으로 교체
             const newBall = createStatBall(number, 24, '0.9rem');
             newBall.style.cursor = 'pointer';
             newBall.dataset.gameIndex = currentSelectingGameIndex;
             newBall.dataset.ballIndex = currentSelectingBallIndex;
             newBall.dataset.isSelected = 'true';
+
             newBall.addEventListener('click', () => {
-                // 반자동 모드: 게임공 클릭 시 흰색바탕 검정폰트로 변경
-                newBall.style.backgroundColor = '#ffffff';
-                newBall.style.color = '#000000';
-                newBall.style.border = '2px solid #000000';
-                newBall.dataset.isSelected = 'false';
+                const cb = document.getElementById(`gameCheckbox${currentSelectingGameIndex}`);
+                if (cb && cb.checked) return; // 체크된 상태에서는 교체 불가
+
+                // 하이라이트 초기화 (다른 모든 게임공의 하이라이트 제거)
+                const allGameBalls = document.querySelectorAll('[id^="gameBalls"] > div');
+                allGameBalls.forEach(b => {
+                    if (b.dataset.isSelected === 'true') {
+                        const bNum = parseInt(b.textContent);
+                        const bClass = getBallClass(bNum);
+                        const bgColors = {
+                            'ball-yellow': '#FBC400',
+                            'ball-blue': '#69C8F2',
+                            'ball-red': '#FF7272',
+                            'ball-gray': '#AAAAAA',
+                            'ball-green': '#B0D840'
+                        };
+                        b.style.backgroundColor = bgColors[bClass] || '#808080';
+                        b.style.color = '#ffffff';
+                        b.style.border = 'none';
+                    } else {
+                        // 빈 공 또는 수동 모드 공의 하이라이트 제거
+                        b.style.border = '';
+                        b.style.boxShadow = '';
+                    }
+                });
+
+                // 반자동 모드: 게임공 클릭 시 배경색을 보색으로 변경
+                const ballClass = getBallClass(number);
+                const bgColors = {
+                    'ball-yellow': '#FBC400',
+                    'ball-blue': '#69C8F2',
+                    'ball-red': '#FF7272',
+                    'ball-gray': '#AAAAAA',
+                    'ball-green': '#B0D840'
+                };
+                const bgColor = bgColors[ballClass] || '#808080';
+                const compHex = getComplementaryColor(bgColor);
+
+                newBall.style.backgroundColor = compHex;
+                newBall.style.color = bgColor; // 글자색은 배경색으로 (보색 대비)
+                newBall.style.border = `2px solid ${bgColor}`;
+
                 // 선택 대기 상태로 설정
-                currentSelectingGameIndex = currentSelectingGameIndex;
-                currentSelectingBallIndex = currentSelectingBallIndex;
+                currentSelectingGameIndex = parseInt(newBall.dataset.gameIndex);
+                currentSelectingBallIndex = parseInt(newBall.dataset.ballIndex);
             });
-            selectingBall.replaceWith(newBall);
+            selectingBallElement.replaceWith(newBall);
         }
         // 반자동 모드 합계 업데이트
         const numbers = AppState.setSelectedBalls[currentSelectingGameIndex - 1] || [];
         updateGameSum(currentSelectingGameIndex, numbers);
-    } else {
-        updateGameSet(currentSelectingGameIndex, currentMode);
-    }
 
-    // 수동 모드에서 6개 모두 선택되면 체크박스 활성화 후 체크
-    if (currentMode === 'manual') {
-        const allNumbers = AppState.setSelectedBalls[currentSelectingGameIndex - 1] || [];
-        const validNumbers = allNumbers.filter(n => n && n >= 1 && n <= 45);
-        if (validNumbers.length === 6) {
-            const checkbox = document.getElementById(`gameCheckbox${currentSelectingGameIndex}`);
-            if (checkbox) {
-                checkbox.disabled = false;
-                checkbox.checked = true;
+        // 반자동 모드에서 6개 선택되면 체크박스 활성화
+        const checkbox = document.getElementById(`gameCheckbox${currentSelectingGameIndex}`);
+        if (checkbox) {
+            const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+            checkbox.disabled = validNumbers.length !== 6;
+        }
+
+    } else { // manual mode
+        // 수동 모드 설정 반영
+        AppState.setSelectedBalls[currentSelectingGameIndex - 1] = AppState.setSelectedBalls[currentSelectingGameIndex - 1].sort((a, b) => a - b);
+        updateGameSet(currentSelectingGameIndex, currentMode);
+
+        let numbers = AppState.setSelectedBalls[currentSelectingGameIndex - 1] || [];
+        updateGameSum(currentSelectingGameIndex, numbers);
+
+        const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+
+        // 수동 모드에서 6개 선택되면 체크박스 활성화 및 선택 종료
+        const checkbox = document.getElementById(`gameCheckbox${currentSelectingGameIndex}`);
+        if (checkbox) {
+            checkbox.disabled = validNumbers.length !== 6;
+        }
+
+        // 6개가 안 찼으면 다음 빈 공으로 자동 이동
+        if (validNumbers.length < 6) {
+            let nextEmptyIndex = -1;
+            // 이미 0~5번째 인덱스를 순회하며 빈 곳을 찾음 (배열의 length 확인 혹은 undefined 확인)
+            for (let i = 0; i < 6; i++) {
+                if (!AppState.setSelectedBalls[currentSelectingGameIndex - 1][i]) {
+                    nextEmptyIndex = i;
+                    break;
+                }
             }
-            updateSaveBoxState();
+
+            if (nextEmptyIndex !== -1) {
+                // 선택 상태 초기화 후 바로 이어갈 수 있게 재설정
+                currentSelectingBallIndex = nextEmptyIndex;
+
+                // 하이라이트 재설정
+                const allGameBalls = document.querySelectorAll('[id^="gameBalls"] > div');
+                allGameBalls.forEach(ball => {
+                    ball.style.border = '';
+                    ball.style.boxShadow = '';
+                });
+
+                // 선택공 그리드의 공에 선택 가능 표시
+                const gridBalls = document.querySelectorAll('.number-grid-container .stat-ball');
+                gridBalls.forEach(ball => {
+                    ball.style.opacity = '1';
+                    ball.style.cursor = 'pointer';
+                    ball.style.transform = 'scale(1)';
+                });
+
+                // 선택 중인 게임공 하이라이트 (방금 업데이트 된 DOM)
+                const selectingBall = document.querySelector(`#gameBalls${currentSelectingGameIndex} > div:nth-child(${nextEmptyIndex + 1})`);
+                if (selectingBall) {
+                    selectingBall.style.border = '2px solid #0066ff';
+                    selectingBall.style.boxShadow = '0 0 8px rgba(0, 102, 255, 0.5)';
+                }
+
+                // 함수 종료 방지, 다음 선택 대기
+                return;
+            }
         }
     }
 
-    // 선택 상태 초기화
+    // 완전히 선택 종료되었을 경우 상태 초기화
     currentSelectingGameIndex = null;
     currentSelectingBallIndex = null;
 
@@ -2690,15 +2251,27 @@ function generateAllGames() {
 /**
  * 개별 게임 생성
  */
-function generateGame(gameIndex, mode) {
+function generateGame(gameIndex, mode, isModeChange = false) {
     const ballsContainer = document.getElementById(`gameBalls${gameIndex}`);
     if (!ballsContainer) return;
 
     ballsContainer.innerHTML = '';
 
     if (mode === 'auto') {
-        // 자동 모드: 필터 적용하여 완전 자동 생성
-        const numbers = generateNumbersWithFilters();
+        const checkbox = document.getElementById(`gameCheckbox${gameIndex}`);
+        let numbers;
+        if (isModeChange) {
+            numbers = generateNumbersWithFilters();
+            if (!AppState.setSelectedBalls) AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
+            AppState.setSelectedBalls[gameIndex - 1] = numbers;
+        } else {
+            numbers = (AppState.setSelectedBalls && AppState.setSelectedBalls[gameIndex - 1]) || [];
+            if (numbers.length !== 6) {
+                numbers = generateNumbersWithFilters();
+                if (!AppState.setSelectedBalls) AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
+                AppState.setSelectedBalls[gameIndex - 1] = numbers;
+            }
+        }
 
         // 게임공 표시
         numbers.forEach(num => {
@@ -2706,20 +2279,10 @@ function generateGame(gameIndex, mode) {
             ballsContainer.appendChild(ball);
         });
 
-        // AppState에 저장
-        if (!AppState.setSelectedBalls) {
-            AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
-        }
-        AppState.setSelectedBalls[gameIndex - 1] = numbers;
-
-        // 체크박스 자동 체크, 모드 버튼 비활성화 (저장 준비)
-        const checkbox = document.getElementById(`gameCheckbox${gameIndex}`);
-        var modeBtnEl = document.getElementById('modeBtn' + gameIndex);
+        const modeBtnEl = document.getElementById('modeBtn' + gameIndex);
         if (checkbox) {
-            checkbox.checked = true;
             checkbox.disabled = false;
         }
-        if (modeBtnEl) modeBtnEl.disabled = true;
 
         // 게임공 비활성화 (클릭 불가)
         const gameBalls = ballsContainer.querySelectorAll('.stat-ball');
@@ -2731,35 +2294,15 @@ function generateGame(gameIndex, mode) {
         // 합계 업데이트
         updateGameSum(gameIndex, numbers);
     } else if (mode === 'semi-auto') {
-        // 반자동 모드: 기존 선택된 번호를 유지하고 나머지만 자동 생성
         if (!AppState.setSelectedBalls) {
             AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
         }
-        let existingNumbers = AppState.setSelectedBalls[gameIndex - 1] || [];
-        existingNumbers = existingNumbers.filter(n => n && n >= 1 && n <= 45);
-        const remainingCount = 6 - existingNumbers.length;
+        let numbers = AppState.setSelectedBalls[gameIndex - 1] || [];
+        const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
 
-        let allNumbers = [...existingNumbers];
-
-        if (remainingCount > 0) {
-            // 나머지 번호 자동 생성 (반자동은 구간 확인 skip)
-            const fullNumbers = generateNumbersWithFilters(existingNumbers, true);
-            // 기존 번호를 포함한 전체 번호에서 새로 추가된 번호만 추출
-            const newNumbers = fullNumbers.filter(n => !existingNumbers.includes(n));
-            allNumbers = [...existingNumbers, ...newNumbers].slice(0, 6);
-            AppState.setSelectedBalls[gameIndex - 1] = allNumbers.sort((a, b) => a - b);
-        } else {
-            AppState.setSelectedBalls[gameIndex - 1] = allNumbers.sort((a, b) => a - b);
-        }
-
-        // 반자동 모드: 옵션필터 조건으로 게임공 출력, 체크박스 초기화
-        const numbers = AppState.setSelectedBalls[gameIndex - 1] || [];
-
-        // 체크박스: 6개 있으면 활성화, 해제
         const checkbox = document.getElementById(`gameCheckbox${gameIndex}`);
         if (checkbox) {
-            checkbox.checked = false;
-            checkbox.disabled = numbers.length !== 6;
+            checkbox.disabled = validNumbers.length !== 6;
         }
 
         // 게임공 표시
@@ -2771,12 +2314,50 @@ function generateGame(gameIndex, mode) {
                 ballElement.dataset.gameIndex = gameIndex;
                 ballElement.dataset.ballIndex = i;
                 ballElement.dataset.isSelected = 'true';
+
                 ballElement.addEventListener('click', () => {
-                    // 반자동 모드: 게임공 클릭 시 흰색바탕 검정폰트로 변경
-                    ballElement.style.backgroundColor = '#ffffff';
-                    ballElement.style.color = '#000000';
-                    ballElement.style.border = '2px solid #000000';
-                    ballElement.dataset.isSelected = 'false';
+                    const cb = document.getElementById(`gameCheckbox${gameIndex}`);
+                    if (cb && cb.checked) return; // 체크된 상태에서는 교체 불가
+
+                    // 하이라이트 초기화 (다른 모든 게임공의 하이라이트 제거)
+                    const allGameBalls = document.querySelectorAll('[id^="gameBalls"] > div');
+                    allGameBalls.forEach(b => {
+                        if (b.dataset.isSelected === 'true') {
+                            const bNum = parseInt(b.textContent);
+                            const bClass = getBallClass(bNum);
+                            const bgColors = {
+                                'ball-yellow': '#FBC400',
+                                'ball-blue': '#69C8F2',
+                                'ball-red': '#FF7272',
+                                'ball-gray': '#AAAAAA',
+                                'ball-green': '#B0D840'
+                            };
+                            b.style.backgroundColor = bgColors[bClass] || '#808080';
+                            b.style.color = '#ffffff';
+                            b.style.border = 'none';
+                        } else {
+                            // 빈 공 또는 수동 모드 공의 하이라이트 제거
+                            b.style.border = '';
+                            b.style.boxShadow = '';
+                        }
+                    });
+
+                    // 반자동 모드: 게임공 클릭 시 배경색을 보색으로 변경
+                    const ballClass = getBallClass(num);
+                    const bgColors = {
+                        'ball-yellow': '#FBC400',
+                        'ball-blue': '#69C8F2',
+                        'ball-red': '#FF7272',
+                        'ball-gray': '#AAAAAA',
+                        'ball-green': '#B0D840'
+                    };
+                    const bgColor = bgColors[ballClass] || '#808080';
+                    const compHex = getComplementaryColor(bgColor);
+
+                    ballElement.style.backgroundColor = compHex;
+                    ballElement.style.color = bgColor; // 글자색은 배경색으로 (보색 대비)
+                    ballElement.style.border = `2px solid ${bgColor}`;
+
                     // 선택 대기 상태로 설정
                     currentSelectingGameIndex = gameIndex;
                     currentSelectingBallIndex = i;
@@ -2817,33 +2398,54 @@ function generateGame(gameIndex, mode) {
         }
         const currentNumbers = AppState.setSelectedBalls[gameIndex - 1] || [];
         for (let i = 0; i < 6; i++) {
-            const ball = document.createElement('div');
-            ball.className = 'stat-ball';
-            ball.style.width = '24px';
-            ball.style.height = '24px';
-            ball.style.borderRadius = '50%';
-            ball.style.backgroundColor = '#000000';
-            ball.style.color = '#ffffff';
-            ball.style.display = 'flex';
-            ball.style.alignItems = 'center';
-            ball.style.justifyContent = 'center';
-            ball.style.fontSize = '0.9rem';
-            ball.style.fontWeight = '700';
-            ball.style.cursor = 'pointer';
-            ball.style.border = '0.2px solid #000000';
+            let ball;
 
             if (currentNumbers[i]) {
-                ball.textContent = currentNumbers[i];
+                // 선택된 번호가 있으면 색상 공 생성
+                ball = createStatBall(currentNumbers[i], 24, '0.9rem');
+                ball.style.cursor = 'pointer';
+                ball.dataset.gameIndex = gameIndex;
+                ball.dataset.ballIndex = i;
             } else {
+                // 선택되지 않았으면 기존 흑백 원형 버튼 생성
+                ball = document.createElement('div');
+                ball.className = 'stat-ball';
+                ball.style.width = '24px';
+                ball.style.height = '24px';
+                ball.style.borderRadius = '50%';
+                ball.style.backgroundColor = '#000000';
+                ball.style.color = '#ffffff';
+                ball.style.display = 'flex';
+                ball.style.alignItems = 'center';
+                ball.style.justifyContent = 'center';
+                ball.style.fontSize = '0.9rem';
+                ball.style.fontWeight = '700';
+                ball.style.cursor = 'pointer';
+                ball.style.border = '0.2px solid #000000';
                 ball.textContent = '?';
+
+                ball.dataset.gameIndex = gameIndex;
+                ball.dataset.ballIndex = i;
             }
 
-            ball.dataset.gameIndex = gameIndex;
-            ball.dataset.ballIndex = i;
-
-            // 공 클릭 시 번호 선택 (선택 모드일 때만)
+            // 게임공 클릭 시 번호 선택 (선택 모드일 때만)
             ball.addEventListener('click', () => {
-                handleManualBallClick(gameIndex, i);
+                const cb = document.getElementById(`gameCheckbox${gameIndex}`);
+                if (cb && cb.checked) return; // 체크된 상태에서는 수정 불가
+
+                // 이전 선택 하이라이트 제거
+                const allBalls = ballsContainer.querySelectorAll('.stat-ball');
+                allBalls.forEach(b => {
+                    b.style.border = '0.2px solid #000000';
+                    b.style.boxShadow = 'none';
+                });
+
+                // 현재 선택공 하이라이트
+                ball.style.border = '2px solid #0066ff';
+                ball.style.boxShadow = '0 0 8px rgba(0, 102, 255, 0.5)';
+
+                currentSelectingGameIndex = gameIndex;
+                currentSelectingBallIndex = i;
             });
 
             ballsContainer.appendChild(ball);
@@ -2853,6 +2455,11 @@ function generateGame(gameIndex, mode) {
         updateGameSum(gameIndex, currentNumbers);
     }
 }
+
+/** 
+ * 수동 모드에서 그리드 공 클릭 시 처리하는 함수가 있다면 수정 필요 
+ * (기존 handleManualBallClick 대신 인라인 혹은 다른 함수 사용 중일 수 있음)
+ */
 
 /**
  * 게임 합계 업데이트
@@ -2873,10 +2480,10 @@ function updateGameSum(gameIndex, numbers) {
  */
 /** 구간선택(시작~종료) 값 반환. 입력값 없으면 AppState 또는 21/255 사용 */
 function getSumRange() {
-    var startEl = document.getElementById('sumRangeStart');
-    var endEl = document.getElementById('sumRangeEnd');
-    var start = startEl && startEl.value !== '' ? parseInt(startEl.value, 10) : (AppState.sumRangeStart != null ? AppState.sumRangeStart : 21);
-    var end = endEl && endEl.value !== '' ? parseInt(endEl.value, 10) : (AppState.sumRangeEnd != null ? AppState.sumRangeEnd : 255);
+    const startEl = document.getElementById('sumRangeStart');
+    const endEl = document.getElementById('sumRangeEnd');
+    let start = startEl && startEl.value !== '' ? parseInt(startEl.value, 10) : (AppState.sumRangeStart != null ? AppState.sumRangeStart : 21);
+    let end = endEl && endEl.value !== '' ? parseInt(endEl.value, 10) : (AppState.sumRangeEnd != null ? AppState.sumRangeEnd : 255);
     if (isNaN(start) || start < 21) start = 21;
     if (isNaN(end) || end > 255) end = 255;
     if (start > end) start = end;
@@ -3003,8 +2610,8 @@ function countSequentialPairs(numbers) {
 /**
  * 게임 세트 업데이트
  */
-function updateGameSet(gameIndex, mode) {
-    generateGame(gameIndex, mode);
+function updateGameSet(gameIndex, mode, isModeChange = false) {
+    generateGame(gameIndex, mode, isModeChange);
 }
 
 /**
@@ -3012,25 +2619,40 @@ function updateGameSet(gameIndex, mode) {
  */
 function updateSaveBoxState() {
     const saveRound = document.getElementById('saveRound');
-    const saveSet = document.getElementById('saveSet');
     const saveBtn = document.getElementById('saveBtn');
 
-    if (!saveRound || !saveSet || !saveBtn) return;
+    if (!saveRound || !saveBtn) return;
 
-    // 모든 체크박스가 체크되었는지 확인
-    let allChecked = true;
+    // 1~5개 게임 중 하나라도 6개 번호가 완성되었고 체크되어 있는지 확인
+    let hasValidGame = false;
     for (let i = 1; i <= 5; i++) {
         const checkbox = document.getElementById(`gameCheckbox${i}`);
-        if (!checkbox || !checkbox.checked) {
-            allChecked = false;
-            break;
+        if (checkbox && checkbox.checked) {
+            const numbers = AppState.setSelectedBalls[i - 1] || [];
+            const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+            if (validNumbers.length === 6) {
+                hasValidGame = true;
+                break;
+            }
         }
     }
 
-    // 저장박스 활성화/비활성화
-    saveRound.disabled = !allChecked;
-    saveSet.disabled = !allChecked;
-    saveBtn.disabled = !allChecked;
+    // 저장박스 및 버튼 활성화/비활성화
+    saveBtn.disabled = !hasValidGame;
+
+    // 유효한 게임이 있으면 회차 자동 세팅 (최신 회차 + 1)
+    if (hasValidGame && AppState && AppState.allLotto645Data && AppState.allLotto645Data.length > 0) {
+        const latestRound = AppState.allLotto645Data[0].round;
+        saveRound.value = latestRound + 1;
+        saveRound.readOnly = true; // 읽기 전용으로 설정
+        saveRound.disabled = false;
+    } else if (!hasValidGame) {
+        saveRound.value = "";
+        saveRound.disabled = true;
+        saveRound.readOnly = false;
+    } else {
+        saveRound.disabled = !hasValidGame;
+    }
 }
 
 /**
@@ -3069,54 +2691,11 @@ async function saveGamesToCSV() {
         }
     }
 
-    // 체크된 게임들만 저장
-    const gamesToSave = [];
-    for (let i = 1; i <= 5; i++) {
-        const checkbox = document.getElementById(`gameCheckbox${i}`);
-        if (checkbox && checkbox.checked) {
-            const numbers = AppState.setSelectedBalls[i - 1] || [];
-            // 6개 번호가 모두 있는지 확인
-            const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
-            if (validNumbers.length === 6) {
-                gamesToSave.push({
-                    round: round,
-                    game: i,
-                    numbers: validNumbers.sort((a, b) => a - b)
-                });
-            } else {
-                alert(`${i}게임의 번호가 완성되지 않았습니다. (현재: ${validNumbers.length}개)`);
-                return;
-            }
-        }
-    }
-
-    if (gamesToSave.length === 0) {
-        alert('저장할 게임이 없습니다. 체크박스를 선택하고 번호를 완성해주세요.');
-        return;
-    }
-
     try {
-        // Lotto023 XLSX 파일 로드
-        const response = await fetch(XLSX_PATHS.LOTTO023);
-        let existingData = [];
-
-        if (response.ok) {
-            const ab = await response.arrayBuffer();
-            existingData = parseXLSX(ab);
-        }
-
-        // 기존 데이터에서 같은 회차 데이터 제거 (업데이트)
-        existingData = existingData.filter(row => {
-            const rowRound = parseInt(row['회차']) || 0;
-            return !(rowRound === round);
-        });
-
-        // 현재 전역 필터 값 읽기
         const oddEvenFilter = document.getElementById('oddEvenFilter')?.value || 'none';
         const sequenceFilter = document.getElementById('sequenceFilter')?.value || 'none';
         const hotColdFilter = document.getElementById('hotColdFilter')?.value || 'none';
 
-        // 필터 값 매핑 함수 (0:6, 6:0 지원)
         const mapRatioToNumber = (value) => {
             if (value === 'none') return -1;
             if (value === '0-6') return 0;
@@ -3138,52 +2717,96 @@ async function saveGamesToCSV() {
         const sequenceValue = mapSequenceToNumber(sequenceFilter);
         const hotColdValue = mapRatioToNumber(hotColdFilter);
 
-        // 새 데이터 추가
-        gamesToSave.forEach(game => {
-            // 각 게임의 모드 값 읽기
-            const modeBtn = document.getElementById(`modeBtn${game.game}`);
-            let gameMode = '자동';
-            if (modeBtn) {
-                if (modeBtn.dataset.mode === 'auto') {
-                    gameMode = '자동';
-                } else if (modeBtn.dataset.mode === 'semi-auto') {
-                    gameMode = '반자동';
-                } else if (modeBtn.dataset.mode === 'manual') {
-                    gameMode = '수동';
+        // 체크된 게임들만 저장
+        const gamesToSave = [];
+        for (let i = 1; i <= 5; i++) {
+            const checkbox = document.getElementById(`gameCheckbox${i}`);
+            if (checkbox && checkbox.checked) {
+                const numbers = AppState.setSelectedBalls[i - 1] || [];
+                // 6개 번호가 모두 있는지 확인
+                const validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+                if (validNumbers.length === 6) {
+
+                    // 모드 읽기
+                    const modeBtn = document.getElementById(`modeBtn${i}`);
+                    let gameMode = '자동';
+                    if (modeBtn) {
+                        if (modeBtn.dataset.mode === 'auto') gameMode = '자동';
+                        else if (modeBtn.dataset.mode === 'semi-auto') gameMode = '반자동';
+                        else if (modeBtn.dataset.mode === 'manual') gameMode = '수동';
+                    }
+
+                    const sorted = validNumbers.sort((a, b) => a - b);
+
+                    gamesToSave.push({
+                        '회차': round.toString(),
+                        '세트': '', // 서버에서 자동 채워짐
+                        '게임': i.toString(),
+                        '홀짝': oddEvenValue === -1 ? '' : oddEvenValue.toString(),
+                        '연속': sequenceValue.toString(),
+                        '핫콜': hotColdValue === -1 ? '' : hotColdValue.toString(),
+                        '게임선택': gameMode,
+                        '선택1': sorted[0].toString(),
+                        '선택2': sorted[1].toString(),
+                        '선택3': sorted[2].toString(),
+                        '선택4': sorted[3].toString(),
+                        '선택5': sorted[4].toString(),
+                        '선택6': sorted[5].toString()
+                    });
                 }
             }
+        }
 
-            const row = {
-                '회차': game.round.toString(),
-                '게임': game.game.toString(),
-                '홀짝': oddEvenValue === -1 ? '' : oddEvenValue.toString(),
-                '연속': sequenceValue.toString(),
-                '핫콜': hotColdValue === -1 ? '' : hotColdValue.toString(),
-                '게임선택': gameMode,
-                '선택1': game.numbers[0].toString(),
-                '선택2': game.numbers[1].toString(),
-                '선택3': game.numbers[2].toString(),
-                '선택4': game.numbers[3].toString(),
-                '선택5': game.numbers[4].toString(),
-                '선택6': game.numbers[5].toString()
-            };
-            existingData.push(row);
+        if (gamesToSave.length === 0) {
+            alert('저장할 게임이 없습니다. 체크박스를 선택하고 번호를 완성해주세요.');
+            return;
+        }
+
+        const baseUrl = typeof getApiBaseUrl === 'function' ? getApiBaseUrl() : 'http://localhost:8000';
+        const response = await fetch(`${baseUrl}/api/save-lotto023`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                games: gamesToSave
+            })
         });
 
-        // XLSX로 다운로드 (세트 제외)
-        const headers = ['회차', '게임', '홀짝', '연속', '핫콜', '게임선택', '선택1', '선택2', '선택3', '선택4', '선택5', '선택6'];
-        const rows = existingData.map(row => headers.map(h => (row[h] != null ? String(row[h]) : '')));
-        const data = [headers, ...rows];
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Lotto023');
-        XLSX.writeFile(wb, 'Lotto023.xlsx');
+        if (!response.ok) {
+            throw new Error(`서버 응답 오류 (상태 코드: ${response.status})`);
+        }
 
-        // 결과박스 업데이트
-        await loadAndDisplayResults();
+        const result = await response.json();
 
-        alert('저장 완료!');
+        if (result.returnValue === 'success') {
+            // 새 데이터 로드를 위해 기존 캐시 삭제
+            if (typeof CACHE_KEYS !== 'undefined' && CACHE_KEYS.LOTTO023) {
+                localStorage.removeItem(CACHE_KEYS.LOTTO023);
+            } else {
+                localStorage.removeItem('LOTTO023_DATA_CACHE_V2');
+            }
+
+            await loadAndDisplayResults();
+
+            // 1~5개 게임 초기화
+            AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
+            for (let i = 1; i <= 5; i++) {
+                const cb = document.getElementById(`gameCheckbox${i}`);
+                if (cb) {
+                    cb.checked = false;
+                    cb.disabled = true;
+                }
+            }
+            generateAllGames();
+            updateSaveBoxState();
+
+            alert('저장 완료!');
+        } else {
+            throw new Error(result.error || '알 수 없는 오류');
+        }
     } catch (error) {
+        console.error('저장 오류:', error);
         alert('저장 중 오류가 발생했습니다: ' + error.message);
     }
 }
@@ -3226,7 +2849,12 @@ async function loadAndDisplayResults() {
             const winRound = AppState.allLotto645Data.find(r => r.round === round);
             const winningNumbers = winRound && winRound.numbers ? new Set(winRound.numbers) : null;
 
-            games.sort((a, b) => a.game - b.game);
+            games.sort((a, b) => {
+                const setA = a.set !== undefined ? a.set : parseInt(a['세트']) || 0;
+                const setB = b.set !== undefined ? b.set : parseInt(b['세트']) || 0;
+                if (setA !== setB) return setB - setA;
+                return a.game - b.game;
+            });
 
             games.forEach(game => {
                 const resultLine = document.createElement('div');
@@ -3255,7 +2883,10 @@ async function loadAndDisplayResults() {
                 const hc = game.hotCold !== undefined && game.hotCold !== "" ? game.hotCold : "-";
                 const mode = game.gameMode || "-";
 
-                infoText.innerHTML = `<span style="font-size: 1.125em; font-weight: bold; margin-left: 2px; margin-right: 12px;">${game.round} 회</span> ${game.game}게임 / 홀${oe} / 연${seq} / 핫${hc} / ${mode}`;
+                const setVal = game.set !== undefined ? game.set : game['세트'];
+                const setDisplay = setVal !== undefined && setVal !== null && setVal !== '' ? `${setVal}-` : '';
+
+                infoText.innerHTML = `<span style="font-size: 1.125em; font-weight: bold; margin-left: 2px; margin-right: 12px;">${game.round} 회</span> ${setDisplay}${game.game}게임 / 홀${oe} / 연${seq} / 핫${hc} / ${mode}`;
 
                 // 우측 결과공 컨테이너
                 const resultBallsContainer = document.createElement('div');
@@ -4700,8 +4331,8 @@ function renderViewNumbersList(baseData) {
 
 /** 최신 추첨정보 모달 (회차별 당첨번호 클릭 시 · 동행복권 파싱 결과) */
 function showLatestLottoModal(htmlContent) {
-    var modal = document.getElementById('latestLottoModal');
-    var content = document.getElementById('latestLottoModalContent');
+    const modal = document.getElementById('latestLottoModal');
+    const content = document.getElementById('latestLottoModalContent');
     if (modal && content) {
         content.innerHTML = htmlContent;
         modal.classList.add('is-open');
@@ -4709,7 +4340,7 @@ function showLatestLottoModal(htmlContent) {
     }
 }
 function hideLatestLottoModal() {
-    var modal = document.getElementById('latestLottoModal');
+    const modal = document.getElementById('latestLottoModal');
     if (modal) {
         modal.classList.remove('is-open');
         modal.setAttribute('aria-hidden', 'true');
@@ -4717,17 +4348,17 @@ function hideLatestLottoModal() {
 }
 
 (function setupLatestLottoClick() {
-    var titleEl = document.getElementById('roundNumbersTitle');
+    const titleEl = document.getElementById('roundNumbersTitle');
     if (!titleEl) return;
     titleEl.style.cursor = 'pointer';
 
-    var closeBtn = document.getElementById('latestLottoModalClose');
+    const closeBtn = document.getElementById('latestLottoModalClose');
     if (closeBtn) closeBtn.addEventListener('click', hideLatestLottoModal);
 
-    var modal = document.getElementById('latestLottoModal');
-    if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) hideLatestLottoModal(); });
+    const modal = document.getElementById('latestLottoModal');
+    if (modal) modal.addEventListener('click', e => { if (e.target === modal) hideLatestLottoModal(); });
 
-    titleEl.addEventListener('click', function () {
+    titleEl.addEventListener('click', () => {
         if (typeof loadAndShowLottoRound === 'function') {
             loadAndShowLottoRound(null); // 최신 회차 조회
         }
@@ -4742,7 +4373,7 @@ function setupFooterToggle() {
     if (!footer || !bottomArea) return;
 
     // 1. 토글 기능
-    footer.addEventListener('click', function () {
+    footer.addEventListener('click', () => {
         const isHidden = bottomArea.style.display === 'none';
         if (isHidden) {
             bottomArea.style.display = 'block';
@@ -4759,7 +4390,7 @@ function setupFooterToggle() {
         let isDragging = false;
         let startY, startBottom;
 
-        dragHandle.addEventListener('mousedown', function (e) {
+        dragHandle.addEventListener('mousedown', e => {
             isDragging = true;
             startY = e.clientY;
             // 현재 bottom 값 가져오기 (없으면 50px)
@@ -4771,7 +4402,7 @@ function setupFooterToggle() {
             e.preventDefault();
         });
 
-        document.addEventListener('mousemove', function (e) {
+        document.addEventListener('mousemove', e => {
             if (!isDragging) return;
 
             const deltaY = startY - e.clientY; // 위로 드래그하면 양수
@@ -4788,7 +4419,7 @@ function setupFooterToggle() {
             bottomArea.style.bottom = newBottom + 'px';
         });
 
-        document.addEventListener('mouseup', function () {
+        document.addEventListener('mouseup', () => {
             if (isDragging) {
                 isDragging = false;
                 bottomArea.style.transition = '';
@@ -4799,7 +4430,7 @@ function setupFooterToggle() {
 }
 
 // 모든 리소스가 로드된 후 초기화 실행
-window.addEventListener('load', function () {
+window.addEventListener('load', () => {
     setTimeout(function () {
         try {
             initializeApp();
@@ -5168,5 +4799,3 @@ function getRoundDateObject(round) {
 if (document.readyState === 'complete') {
     setTimeout(initializeApp, 200);
 }
-
-

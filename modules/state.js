@@ -3,7 +3,7 @@
  * 애플리케이션의 모든 상태를 중앙에서 관리
  */
 
-const DEFAULT_SET_COUNT = 5;
+// DEFAULT_SET_COUNT는 constants.js에서 전역으로 정의됨
 
 const AppState = {
     // 게임 관련 상태

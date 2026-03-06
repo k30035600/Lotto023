@@ -81,32 +81,5 @@ def get_logger(name):
     """
     return logging.getLogger(name)
 
-def mask_sensitive_data(data, keys=['api_key', 'password', 'token']):
-    """
-    민감한 데이터 마스킹
-    
-    Args:
-        data: 마스킹할 데이터 (str 또는 dict)
-        keys: 마스킹할 키 목록
-    
-    Returns:
-        str: 마스킹된 데이터
-    """
-    if isinstance(data, str):
-        if len(data) < 8:
-            return '***'
-        return f'{data[:4]}...{data[-4:]}'
-    
-    if isinstance(data, dict):
-        masked = {}
-        for key, value in data.items():
-            if any(k in key.lower() for k in keys):
-                masked[key] = mask_sensitive_data(str(value))
-            else:
-                masked[key] = value
-        return masked
-    
-    return data
-
 # 로깅 시스템 초기화
 setup_logging()

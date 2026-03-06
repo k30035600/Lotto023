@@ -7,9 +7,9 @@
  * LocalStorage 캐시 키
  */
 const CACHE_KEYS = {
-    LOTTO645: 'LOTTO645_DATA_CACHE',
-    LOTTO023: 'LOTTO023_DATA_CACHE',
-    METADATA: 'LOTTO_METADATA_CACHE'
+    LOTTO645: 'LOTTO645_DATA_CACHE_V2',
+    LOTTO023: 'LOTTO023_DATA_CACHE_V2',
+    METADATA: 'LOTTO_METADATA_CACHE_V2'
 };
 
 /**
@@ -130,6 +130,83 @@ async function loadXLSX(url) {
 }
 
 /**
+ * 데이터 정규화 (필드명 통합)
+ * @param {Array} data - 원본 데이터
+ * @returns {Array} 정규화된 데이터
+ */
+function normalizeLottoData(data) {
+    if (!Array.isArray(data)) return [];
+
+    return data.map(item => {
+        // 이미 정규화되어 있으면 그대로 반환
+        if (item.round !== undefined && Array.isArray(item.numbers)) {
+            return item;
+        }
+
+        const normalized = { ...item };
+
+        // 1. 회차 -> round
+        if (item['회차'] !== undefined) {
+            normalized.round = Number(item['회차']);
+        }
+
+        // 2. 번호1~6 또는 선택1~6 -> numbers 배열
+        if (!Array.isArray(item.numbers)) {
+            const numbers = [];
+            for (let i = 1; i <= 6; i++) {
+                let num = item[`번호${i}`];
+                if (num === undefined || num === '') {
+                    num = item[`선택${i}`];
+                }
+                if (num !== undefined && num !== '') {
+                    numbers.push(Number(num));
+                }
+            }
+            if (numbers.length === 6) {
+                normalized.numbers = numbers;
+            }
+        }
+
+        // 3. 보너스번호 -> bonus
+        if (item['보너스번호'] !== undefined) {
+            normalized.bonus = Number(item['보너스번호']);
+        }
+
+        // 4. 세트 -> set
+        if (item['세트'] !== undefined) {
+            normalized.set = Number(item['세트']);
+        }
+
+        // 5. 게임 -> game
+        if (item['게임'] !== undefined) {
+            normalized.game = Number(item['게임']);
+        }
+
+        // 6. 홀짝 -> oddEven
+        if (item['홀짝'] !== undefined) {
+            normalized.oddEven = item['홀짝'];
+        }
+
+        // 7. 연속 -> sequence
+        if (item['연속'] !== undefined) {
+            normalized.sequence = item['연속'];
+        }
+
+        // 8. 핫콜 -> hotCold
+        if (item['핫콜'] !== undefined) {
+            normalized.hotCold = item['핫콜'];
+        }
+
+        // 9. 게임선택 -> gameMode
+        if (item['게임선택'] !== undefined) {
+            normalized.gameMode = item['게임선택'];
+        }
+
+        return normalized;
+    });
+}
+
+/**
  * Lotto645 데이터 로드 (캐시 우선)
  * @param {string} basePath - 기본 경로
  * @returns {Promise<Array>} 로또 데이터
@@ -146,11 +223,12 @@ async function loadLotto645Data(basePath = '') {
 
     // 2. JSON 로드 시도
     try {
-        const jsonUrl = `${basePath}source/Lotto645.json`;
+        const jsonUrl = `${basePath}.source/Lotto645.json`;
         const data = await loadJSON(jsonUrl);
 
         if (data.length > 0) {
-            const sorted = data.sort((a, b) => b.round - a.round);
+            const normalized = normalizeLottoData(data);
+            const sorted = normalized.sort((a, b) => b.round - a.round);
             saveToCache(CACHE_KEYS.LOTTO645, sorted);
             console.timeEnd('LoadLotto645');
             return sorted;
@@ -161,11 +239,12 @@ async function loadLotto645Data(basePath = '') {
 
     // 3. XLSX 로드 (fallback)
     try {
-        const xlsxUrl = `${basePath}source/Lotto645.xlsx`;
+        const xlsxUrl = `${basePath}.source/Lotto645.xlsx`;
         const data = await loadXLSX(xlsxUrl);
 
         if (data.length > 0) {
-            const sorted = data.sort((a, b) => b.round - a.round);
+            const normalized = normalizeLottoData(data);
+            const sorted = normalized.sort((a, b) => b.round - a.round);
             saveToCache(CACHE_KEYS.LOTTO645, sorted);
             console.timeEnd('LoadLotto645');
             return sorted;
@@ -195,13 +274,14 @@ async function loadLotto023Data(basePath = '') {
 
     // 2. JSON 로드 시도
     try {
-        const jsonUrl = `${basePath}source/Lotto023.json`;
+        const jsonUrl = `${basePath}.source/Lotto023.json`;
         const data = await loadJSON(jsonUrl);
 
         if (data.length > 0) {
-            saveToCache(CACHE_KEYS.LOTTO023, data);
+            const normalized = normalizeLottoData(data);
+            saveToCache(CACHE_KEYS.LOTTO023, normalized);
             console.timeEnd('LoadLotto023');
-            return data;
+            return normalized;
         }
     } catch (error) {
         console.warn('JSON 로드 실패, XLSX 시도:', error);
@@ -209,13 +289,14 @@ async function loadLotto023Data(basePath = '') {
 
     // 3. XLSX 로드 (fallback)
     try {
-        const xlsxUrl = `${basePath}source/Lotto023.xlsx`;
+        const xlsxUrl = `${basePath}.source/Lotto023.xlsx`;
         const data = await loadXLSX(xlsxUrl);
 
         if (data.length > 0) {
-            saveToCache(CACHE_KEYS.LOTTO023, data);
+            const normalized = normalizeLottoData(data);
+            saveToCache(CACHE_KEYS.LOTTO023, normalized);
             console.timeEnd('LoadLotto023');
-            return data;
+            return normalized;
         }
     } catch (error) {
         console.error('XLSX 로드 실패:', error);
@@ -246,44 +327,6 @@ async function fetchLatestRound(apiUrl) {
     }
 }
 
-/**
- * 데이터 유효성 검증
- * @param {Array} data - 검증할 데이터
- * @param {string} type - 데이터 타입 ('lotto645' | 'lotto023')
- * @returns {boolean} 유효성 여부
- */
-function validateData(data, type = 'lotto645') {
-    if (!Array.isArray(data) || data.length === 0) {
-        return false;
-    }
-
-    // 첫 번째 항목 검증
-    const first = data[0];
-
-    if (type === 'lotto645') {
-        return first.round !== undefined &&
-            first.numbers !== undefined &&
-            Array.isArray(first.numbers) &&
-            first.numbers.length === 6;
-    }
-
-    return true;
-}
-
-/**
- * 캐시 무효화
- * @param {string} [key] - 특정 키만 무효화, 없으면 전체
- */
-function invalidateCache(key) {
-    if (key) {
-        localStorage.removeItem(key);
-    } else {
-        Object.values(CACHE_KEYS).forEach(k => {
-            localStorage.removeItem(k);
-        });
-    }
-}
-
 // 전역으로 export
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -296,7 +339,5 @@ if (typeof module !== 'undefined' && module.exports) {
         loadLotto645Data,
         loadLotto023Data,
         fetchLatestRound,
-        validateData,
-        invalidateCache
     };
 }

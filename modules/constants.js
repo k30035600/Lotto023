@@ -6,7 +6,7 @@
 /**
  * 로또 게임 관련 상수
  */
-export const LOTTO_CONSTANTS = {
+const LOTTO_CONSTANTS = {
     // 번호 범위
     MIN_NUMBER: 1,
     MAX_NUMBER: 45,
@@ -28,7 +28,7 @@ export const LOTTO_CONSTANTS = {
 /**
  * 추첨 일정 상수
  */
-export const DRAW_SCHEDULE = {
+const DRAW_SCHEDULE = {
     DAY_OF_WEEK: 5,      // 토요일 (0=일요일, 6=토요일)
     DRAW_HOUR: 20,       // 20시
     DRAW_MINUTE: 45,     // 45분
@@ -39,7 +39,7 @@ export const DRAW_SCHEDULE = {
 /**
  * 필터 타입 상수
  */
-export const FILTER_TYPES = {
+const FILTER_TYPES = {
     STAT: {
         NONE: 'none',
         COUNT_DESC: 'count-desc',
@@ -71,7 +71,7 @@ export const FILTER_TYPES = {
 /**
  * 홀짝 비율 맵
  */
-export const ODD_EVEN_RATIO_MAP = {
+const ODD_EVEN_RATIO_MAP = {
     'odd': { odd: 4, even: 2 },
     'even': { odd: 2, even: 4 },
     'balanced': { odd: 3, even: 3 }
@@ -80,7 +80,7 @@ export const ODD_EVEN_RATIO_MAP = {
 /**
  * 핫/콜드 비율 맵
  */
-export const HOT_COLD_RATIO_MAP = {
+const HOT_COLD_RATIO_MAP = {
     'hot': { hot: 4, cold: 2 },
     'cold': { hot: 2, cold: 4 },
     'mixed': { hot: 3, cold: 3 }
@@ -89,7 +89,7 @@ export const HOT_COLD_RATIO_MAP = {
 /**
  * UI 관련 상수
  */
-export const UI_CONSTANTS = {
+const UI_CONSTANTS = {
     // 애니메이션 시간 (ms)
     TOAST_DURATION: 3000,
     LOADING_MIN_DURATION: 500,
@@ -113,7 +113,7 @@ export const UI_CONSTANTS = {
 /**
  * 캐시 관련 상수
  */
-export const CACHE_CONSTANTS = {
+const CACHE_CONSTANTS = {
     // LocalStorage 키
     KEYS: {
         LOTTO645: 'LOTTO645_DATA_CACHE',
@@ -136,7 +136,7 @@ export const CACHE_CONSTANTS = {
 /**
  * API 관련 상수
  */
-export const API_CONSTANTS = {
+const API_CONSTANTS = {
     // 엔드포인트
     ENDPOINTS: {
         LATEST: '/api/lotto-latest',
@@ -160,7 +160,7 @@ export const API_CONSTANTS = {
 /**
  * 에러 메시지
  */
-export const ERROR_MESSAGES = {
+const ERROR_MESSAGES = {
     NETWORK: '네트워크 오류가 발생했습니다.',
     DATA_LOAD: '데이터를 불러오는데 실패했습니다.',
     GENERATION: '번호 생성에 실패했습니다.',
@@ -172,7 +172,7 @@ export const ERROR_MESSAGES = {
 /**
  * 성공 메시지
  */
-export const SUCCESS_MESSAGES = {
+const SUCCESS_MESSAGES = {
     DATA_LOADED: '데이터를 성공적으로 불러왔습니다.',
     GENERATED: '번호가 생성되었습니다.',
     SAVED: '저장되었습니다.',
@@ -182,11 +182,29 @@ export const SUCCESS_MESSAGES = {
 /**
  * 개발 모드 플래그
  */
-export const DEV_MODE = {
+const DEV_MODE = {
     ENABLED: false,  // 프로덕션에서는 false
     LOG_LEVEL: 'info',  // 'debug', 'info', 'warn', 'error'
     SHOW_PERFORMANCE: false
 };
+
+const DEFAULT_SET_COUNT = LOTTO_CONSTANTS.DEFAULT_SET_COUNT;
+
+// 브라우저 전역 객체에 할당 (일반 스크립트 호환)
+if (typeof window !== 'undefined') {
+    window.LOTTO_CONSTANTS = LOTTO_CONSTANTS;
+    window.DRAW_SCHEDULE = DRAW_SCHEDULE;
+    window.FILTER_TYPES = FILTER_TYPES;
+    window.ODD_EVEN_RATIO_MAP = ODD_EVEN_RATIO_MAP;
+    window.HOT_COLD_RATIO_MAP = HOT_COLD_RATIO_MAP;
+    window.UI_CONSTANTS = UI_CONSTANTS;
+    window.CACHE_CONSTANTS = CACHE_CONSTANTS;
+    window.API_CONSTANTS = API_CONSTANTS;
+    window.ERROR_MESSAGES = ERROR_MESSAGES;
+    window.SUCCESS_MESSAGES = SUCCESS_MESSAGES;
+    window.DEV_MODE = DEV_MODE;
+    window.DEFAULT_SET_COUNT = DEFAULT_SET_COUNT;
+}
 
 // 전역으로 export (CommonJS 호환)
 if (typeof module !== 'undefined' && module.exports) {
@@ -201,6 +219,7 @@ if (typeof module !== 'undefined' && module.exports) {
         API_CONSTANTS,
         ERROR_MESSAGES,
         SUCCESS_MESSAGES,
-        DEV_MODE
+        DEV_MODE,
+        DEFAULT_SET_COUNT
     };
 }

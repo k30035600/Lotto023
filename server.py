@@ -5,6 +5,15 @@ HTTP 서버 모듈 (Python/Flask)
 - 동행복권 최신 당첨번호: 내부 API(selectPstLt645Info.do) 단일 호출 → /api/lotto-latest
 """
 import sys
+import os
+from pathlib import Path
+
+# 로컬 라이브러리 경로(Lib/site-packages)가 있으면 우선 사용
+BASE_DIR = Path(__file__).resolve().parent
+local_lib = BASE_DIR / 'Lib' / 'site-packages'
+if local_lib.exists():
+    sys.path.insert(0, str(local_lib))
+
 try:
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
@@ -12,9 +21,8 @@ except (AttributeError, OSError):
     pass
 
 import json
-import os
 import time
-from pathlib import Path
+import datetime
 
 try:
     from dotenv import load_dotenv
@@ -23,25 +31,17 @@ except ImportError:
     pass
 
 from flask import Flask, send_from_directory, jsonify, request
+from utils.logger import get_logger
 
 # --- 설정 ---
 PORT = int(os.environ.get('PORT', 8000))
-BASE_DIR = Path(__file__).resolve().parent
 CORS_HEADERS = {'Access-Control-Allow-Origin': '*'}
 CORS_OPTIONS_HEADERS = {**CORS_HEADERS, 'Content-Length': '0'}
-SERVER_START_TIME = time.strftime('%Y-%m-%d %H:%M:%S')
+SERVER_START_TIME = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))).strftime('%Y-%m-%d %H:%M:%S')
 
 app = Flask(__name__, static_folder=BASE_DIR, static_url_path='')
 app.config['JSON_AS_ASCII'] = False
-
-
-# 봇 탐지 우회를 위한 브라우저 헤더 설정 (utils/get_lotto_round.py에서 관리됨)
-
-
-
-
-
-
+logger = get_logger(__name__)
 
 
 
@@ -57,7 +57,6 @@ def _fmt_amount(val):
 
 def _to_latest_response(parsed):
     """API 원본 데이터를 클라이언트용 규격(standard format)으로 변환. 추첨일 YYYY-MM-DD, 당첨금 천 단위 콤마."""
-    import datetime
     d = parsed.get('drwNoDate')
     if not d:
         d = datetime.date.today().isoformat()
@@ -100,7 +99,7 @@ def fetch_latest_lotto():
     local_parsed = None
     try:
         # JSON 먼저 확인 (빠름)
-        json_path = (BASE_DIR / 'source' / 'Lotto645.json').resolve()
+        json_path = (BASE_DIR / '.source' / 'Lotto645.json').resolve()
         if json_path.is_file():
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -121,7 +120,7 @@ def fetch_latest_lotto():
                             'source': 'Lotto645.json (로컬)',
                         }
     except Exception as e:
-        print('[Lotto645] 로컬 JSON 확인 중 오류: %s' % e)
+        logger.warning('[Lotto645] 로컬 JSON 확인 중 오류: %s', e)
 
     # 2. API 호출 필요 여부 판단
     need_api_call = True
@@ -158,11 +157,11 @@ def fetch_latest_lotto():
                         # 추첨일 지남 (일요일 등). API 호출 필요
                         need_api_call = True
         except Exception as e:
-            print('[Lotto645] 날짜 계산 오류, API 호출 시도: %s' % e)
+            logger.warning('[Lotto645] 날짜 계산 오류, API 호출 시도: %s', e)
             need_api_call = True
 
     if not need_api_call and local_parsed:
-        # print('[동행복권] 로컬 데이터가 최신입니다. API 호출 생략.')
+        logger.info('[동행복권] 로컬 데이터가 최신입니다. API 호출 생략.')
         return _to_latest_response(local_parsed), None
 
     # 3. API 호출 (로컬 데이터가 없거나, 갱신이 필요한 경우)
@@ -170,13 +169,13 @@ def fetch_latest_lotto():
         from utils.get_lotto_round import get_latest_lotto
         parsed = get_latest_lotto()
         if parsed:
-            print('[동행복권] API 조회 성공: %s회 (%s)' % (parsed.get('drwNo'), parsed.get('drwNoDate')))
+            logger.info('[동행복권] API 조회 성공: %s회 (%s)', parsed.get('drwNo'), parsed.get('drwNoDate'))
             # 로컬 파일보다 더 최신이면 자동 저장 로직 실행
             if local_parsed:
                  api_drw = parsed.get('drwNo')
                  local_drw = local_parsed.get('drwNo')
                  if api_drw and local_drw and api_drw > local_drw:
-                      print('[동행복권] 새 회차 발견! 로컬 파일 업데이트 시도...')
+                      logger.info('[동행복권] 새 회차 발견! 로컬 파일 업데이트 시도...')
                       # 이미 가져온 데이터를 넘겨서 중복 호출 방지!
                       _update_latest_lotto645(parsed)
 
@@ -184,14 +183,16 @@ def fetch_latest_lotto():
         
         # API 실패 시, 로컬 데이터라도 있으면 반환
         if local_parsed:
-            print('[동행복권] API 실패하여 기존 로컬 데이터 반환.')
+            logger.warning('[동행복권] API 실패하여 기존 로컬 데이터 반환.')
             return _to_latest_response(local_parsed), None
 
         return None, '동행복권 API에서 당첨 정보를 가져오지 못했습니다.'
     except Exception as e:
         if local_parsed:
+             logger.warning('동행복권 API 호출 중 예외 발생. 로컬 데이터 반환: %s', e)
              return _to_latest_response(local_parsed), None
-        return None, str(e)[:120]
+        logger.error('동행복권 API 호출 실패 및 로컬 데이터 없음: %s', e, exc_info=True)
+        return None, '동행복권 API에서 당첨 정보를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.'
 
 
 # --- 라우트 ---
@@ -204,7 +205,7 @@ def _get_lotto645_data_row_count():
     """Lotto645.xlsx 데이터 행 수(헤더 제외). openpyxl 없으면 None."""
     try:
         import openpyxl
-        p = (BASE_DIR / 'source' / 'Lotto645.xlsx').resolve()
+        p = (BASE_DIR / '.source' / 'Lotto645.xlsx').resolve()
         if not p.is_file():
             return None
         wb = openpyxl.load_workbook(p, read_only=True)
@@ -224,7 +225,7 @@ def _fetch_rounds_draw_info(round_list):
     try:
         from utils.get_lotto_round import get_lotto_number
     except ImportError as e:
-        print('[로또] utils.get_lotto_round 임포트 실패: %s' % e)
+        logger.error('[로또] utils.get_lotto_round 임포트 실패: %s', e)
         return []
     out = []
     for rno in round_list:
@@ -235,7 +236,7 @@ def _fetch_rounds_draw_info(round_list):
         try:
             result = get_lotto_number(rno)
         except Exception as e:
-            print('[로또] 회차 %s 조회 예외: %s' % (rno, e))
+            logger.error('[로또] 회차 %s 조회 예외: %s', rno, e)
             continue
         if result is not None:
             out.append({
@@ -245,29 +246,13 @@ def _fetch_rounds_draw_info(round_list):
                 'bonus': result.get('bonus'),
             })
         else:
-            print('[로또] 회차 %s: 동행복권 API에서 데이터 없음(또는 접속 실패)' % rno)
+            logger.warning('[로또] 회차 %s: 동행복권 API에서 데이터 없음(또는 접속 실패)', rno)
     if round_list and not out:
-        print('[로또] 누락 회차 %s건 조회 결과 0건. 동행복권 접속/방화벽 확인 필요.' % len(round_list))
+        logger.warning('[로또] 누락 회차 %s건 조회 결과 0건. 동행복권 접속/방화벽 확인 필요.', len(round_list))
     return out
 
 
-
-@app.route('/api/shutdown', methods=['POST'])
-def api_shutdown():
-    """서버 종료"""
-    def shutdown_server():
-        time.sleep(1)
-        print('[Server] Shutting down by user request...')
-        os._exit(0)
-    
-    import threading
-    threading.Thread(target=shutdown_server).start()
-    return jsonify(returnValue='success', message='Server is shutting down...'), 200, CORS_HEADERS
-
-
 @app.route('/api/health', methods=['GET', 'OPTIONS'])
-
-@app.route('/api/health/', methods=['GET', 'OPTIONS'])
 def api_health():
     """Flask 서버 연결 확인용. 404가 나오면 server.py가 아닌 다른 서버가 8000번에서 동작 중."""
     if request.method == 'OPTIONS':
@@ -276,7 +261,6 @@ def api_health():
 
 
 @app.route('/api/fetch-missing-rounds', methods=['GET', 'OPTIONS'])
-@app.route('/api/fetch-missing-rounds/', methods=['GET', 'OPTIONS'])
 def api_fetch_missing_rounds():
     """누락 회차 추첨정보만 조회(Excel 미수정). 쿼리: rounds=1201,1202,1209"""
     if request.method == 'OPTIONS':
@@ -298,7 +282,7 @@ def _sync_lotto645_xlsx():
     except ImportError as e:
         return False, 0, 0, 'openpyxl 또는 utils.get_lotto_round 미설치: %s' % e, []
 
-    xlsx_path = (BASE_DIR / 'source' / 'Lotto645.xlsx').resolve()
+    xlsx_path = (BASE_DIR / '.source' / 'Lotto645.xlsx').resolve()
     if not xlsx_path.is_file():
         return False, 0, 0, 'Lotto645.xlsx 파일이 없습니다.', []
 
@@ -405,7 +389,7 @@ def _sync_lotto645_xlsx():
         from utils.convert_to_json import convert_xlsx_to_json
         convert_xlsx_to_json()
     except Exception as e:
-        print('[Lotto645] JSON 변환 실패: %s' % e)
+        logger.error('[Lotto645] JSON 변환 실패: %s', e)
 
     return True, added, len(sorted_rounds), None, added_rounds
 
@@ -443,7 +427,7 @@ def _update_latest_lotto645(pre_fetched_data=None):
     if not drw_no:
         return False, '회차 정보가 없습니다.'
 
-    xlsx_path = (BASE_DIR / 'source' / 'Lotto645.xlsx').resolve()
+    xlsx_path = (BASE_DIR / '.source' / 'Lotto645.xlsx').resolve()
     if not xlsx_path.is_file():
         return False, 'Lotto645.xlsx 파일이 없습니다.'
 
@@ -579,26 +563,13 @@ def _update_latest_lotto645(pre_fetched_data=None):
         from utils.convert_to_json import convert_xlsx_to_json
         convert_xlsx_to_json()
     except Exception as e:
-        print('[Lotto645] JSON 변환 실패: %s' % e)
+        logger.error('[Lotto645] JSON 변환 실패: %s', e)
 
-    print('[Lotto645] 최신회차 %s회 추첨정보로 업데이트 완료.' % drw_no)
+    logger.info('[Lotto645] 최신회차 %s회 추첨정보로 업데이트 완료.', drw_no)
     return True, None
 
 
-@app.route('/api/update-latest-lotto645', methods=['POST', 'OPTIONS'])
-@app.route('/api/update-latest-lotto645/', methods=['POST', 'OPTIONS'])
-def api_update_latest_lotto645():
-    """최신회차 추첨정보를 API로 취득해 Lotto645.xlsx 해당 행을 업데이트(당첨회차·추첨일·당첨번호·보너스·1등당첨금·당첨자수·총액)."""
-    if request.method == 'OPTIONS':
-        return '', 204, CORS_OPTIONS_HEADERS
-    success, err = _update_latest_lotto645()
-    if err:
-        return jsonify(returnValue='fail', error=err), 200, CORS_HEADERS
-    return jsonify(returnValue='success'), 200, CORS_HEADERS
-
-
 @app.route('/api/sync-lotto645', methods=['GET', 'POST', 'OPTIONS'])
-@app.route('/api/sync-lotto645/', methods=['GET', 'POST', 'OPTIONS'])
 def api_sync_lotto645():
     """Lotto645.xlsx에 빠진 회차(1~동행복권 최신) 추가. Excel 마지막회차 < API 최신회차일 때 호출."""
     if request.method == 'OPTIONS':
@@ -611,7 +582,6 @@ def api_sync_lotto645():
 
 
 @app.route('/api/lotto645-meta', methods=['GET', 'OPTIONS'])
-@app.route('/api/lotto645-meta/', methods=['GET', 'OPTIONS'])
 def api_lotto645_meta():
     """Lotto645.xlsx 현재 데이터 행 수 반환. 클라이언트가 캐시 여부 검증용으로 사용."""
     if request.method == 'OPTIONS':
@@ -623,7 +593,6 @@ def api_lotto645_meta():
 
 
 @app.route('/api/lotto-latest', methods=['GET', 'OPTIONS'])
-@app.route('/api/lotto-latest/', methods=['GET', 'OPTIONS'])
 def api_lotto_latest():
     if request.method == 'OPTIONS':
         return '', 204, CORS_OPTIONS_HEADERS
@@ -642,7 +611,7 @@ def _get_round_from_lotto645_xlsx(round_no):
         import openpyxl
     except ImportError:
         return None
-    xlsx_path = (BASE_DIR / 'source' / 'Lotto645.xlsx').resolve()
+    xlsx_path = (BASE_DIR / '.source' / 'Lotto645.xlsx').resolve()
     if not xlsx_path.is_file():
         return None
     try:
@@ -778,7 +747,7 @@ def _get_round_from_lotto645_xlsx(round_no):
 # --- Google Gemini AI 설정 ---
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
-    print('[경고] GEMINI_API_KEY가 없습니다.')
+    logger.warning('[경고] GEMINI_API_KEY가 .env 파일에 설정되지 않았습니다.')
 
 
 @app.route('/api/ask-gemini', methods=['POST', 'OPTIONS'])
@@ -788,7 +757,7 @@ def api_ask_gemini():
         return '', 204, CORS_OPTIONS_HEADERS
 
     if not GEMINI_API_KEY:
-        print('[Gemini API 오류] API 키가 설정되지 않음.')
+        logger.error('[Gemini API] API 키가 설정되지 않았습니다.')
         return jsonify(returnValue='fail', error='API 키가 설정되지 않았습니다. .env 파일을 확인하세요.'), 200, CORS_HEADERS
         
 
@@ -800,7 +769,7 @@ def api_ask_gemini():
         target_rounds = req_data.get('targetRounds')  # 회차별 당첨조회 기준 필터링된 목록
         
         # 최근 로또 데이터 로드 (JSON)
-        json_path = (BASE_DIR / 'source' / 'Lotto645.json').resolve()
+        json_path = (BASE_DIR / '.source' / 'Lotto645.json').resolve()
         
         recent_data = []
         analyze_count = 30  # 기본 분석 데이터 수 (최근 30회)
@@ -863,20 +832,20 @@ def api_ask_gemini():
             else:
                 return jsonify(returnValue='fail', error='AI 응답이 비어있습니다.'), 200, CORS_HEADERS
                 
-        except ImportError:
+        except ImportError as e:
+             logger.error(f'[Server] AI 모듈 로드 실패: {e}')
              return jsonify(returnValue='fail', error='AI 분석 모듈을 로드할 수 없습니다.'), 500, CORS_HEADERS
         except Exception as e:
              # AI 호출 실패 시 로그 남기고 클라이언트엔 간단히 전달
-             print(f'[Gemini API 오류] {e}')
+             logger.error(f'[Gemini API 오류] %s', e, exc_info=True)
              return jsonify(returnValue='fail', error=f'AI 분석 중 오류가 발생했습니다: {str(e)[:100]}'), 200, CORS_HEADERS
 
     except Exception as e:
-        print(f'[API 오류] {e}')
+        logger.error(f'[API /api/ask-gemini 오류] %s', e, exc_info=True)
         return jsonify(returnValue='fail', error=f'서버 내부 오류: {str(e)[:100]}'), 200, CORS_HEADERS
 
 
 @app.route('/api/lotto-round/<int:round_no>', methods=['GET', 'OPTIONS'])
-@app.route('/api/lotto-round/<int:round_no>/', methods=['GET', 'OPTIONS'])
 def api_lotto_round(round_no):
     """특정 회차 추첨정보 (동행복권 최신 추첨정보와 동일 형식). API 실패 시 Lotto645.xlsx 로컬 fallback."""
     if request.method == 'OPTIONS':
@@ -891,6 +860,158 @@ def api_lotto_round(round_no):
     return jsonify(_to_latest_response(parsed)), 200, CORS_HEADERS
 
 
+@app.route('/api/save-lotto023', methods=['POST', 'OPTIONS'])
+def api_save_lotto023():
+    """Lotto023 게임 데이터를 Lotto023.xlsx에 저장 (세트/게임 자동 관리)."""
+    if request.method == 'OPTIONS':
+        return '', 204, CORS_OPTIONS_HEADERS
+
+    try:
+        data = request.get_json(silent=True)
+        if not data or 'games' not in data:
+            return jsonify(returnValue='fail', error='저장할 데이터가 없거나 형식이 올바르지 않습니다.'), 400, CORS_HEADERS
+
+        import openpyxl
+        source_dir = BASE_DIR / '.source'
+        source_dir.mkdir(parents=True, exist_ok=True)
+        xlsx_path = (source_dir / 'Lotto023.xlsx').resolve()
+        
+        # 헤더 정의 ('세트' 추가)
+        headers = ['회차', '세트', '게임', '홀짝', '연속', '핫콜', '게임선택', '선택1', '선택2', '선택3', '선택4', '선택5', '선택6']
+        
+        # 파일이 없으면 새로 생성
+        if not xlsx_path.exists():
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Lotto023"
+            for c, header in enumerate(headers, 1):
+                ws.cell(1, c, value=header)
+            wb.save(xlsx_path)
+            wb.close()
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        
+        # 기존 데이터 모두 로드
+        rows = list(ws.iter_rows(values_only=True))
+        data_rows = []
+        header_in_file = []
+        if rows:
+            header_in_file = [str(h) if h is not None else '' for h in rows[0]]
+            if len(rows) > 1:
+                data_rows = [list(r) for r in rows[1:]]
+        
+        # '세트' 컬럼 인덱스 확인 (없으면 추가해야 함)
+        if '세트' not in header_in_file:
+            # 헤더에 '세트' 주입 및 기존 데이터에 빈 칸 추가
+            header_in_file.insert(1, '세트')
+            for r in data_rows:
+                r.insert(1, '1') # 기본값 1세트
+            headers = header_in_file
+        else:
+            headers = header_in_file
+
+        idx_round = headers.index('회차')
+        idx_set = headers.index('세트')
+        idx_game = headers.index('게임')
+
+        new_games = data['games']
+        added_count = 0
+        
+        # 각 게임별로 세트/게임 번호 부여
+        for g in new_games:
+            target_round = int(g['회차'])
+            
+            # 해당 회차의 기존 데이터 찾기
+            round_data = []
+            for r in data_rows:
+                try:
+                    if int(r[idx_round]) == target_round:
+                        round_data.append(r)
+                except: continue
+            
+            if not round_data:
+                # 회차가 없으면 1세트, 1게임부터 시작
+                next_set = 1
+                next_game = 1
+            else:
+                # 회차가 있으면 마지막 세트/게임 확인
+                # 세트/게임 순서대로 정렬하여 마지막 값 추출
+                def sort_key(x):
+                    try:
+                        s = int(x[idx_set]) if x[idx_set] is not None else 1
+                        g_num = int(x[idx_game]) if x[idx_game] is not None else 1
+                        return (s, g_num)
+                    except: return (0, 0)
+                
+                round_data.sort(key=sort_key)
+                last_row = round_data[-1]
+                
+                try:
+                    last_set = int(last_row[idx_set]) if last_row[idx_set] is not None else 1
+                    last_game = int(last_row[idx_game]) if last_row[idx_game] is not None else 1
+                    
+                    if last_game >= 5:
+                        next_set = last_set + 1
+                        next_game = 1
+                    else:
+                        next_set = last_set
+                        next_game = last_game + 1
+                except:
+                    next_set = 1
+                    next_game = 1
+
+            # 새 행 생성
+            new_row = [None] * len(headers)
+            for i, h in enumerate(headers):
+                if h == '회차': new_row[i] = str(target_round)
+                elif h == '세트': new_row[i] = str(next_set)
+                elif h == '게임': new_row[i] = str(next_game)
+                else:
+                    new_row[i] = g.get(h, '')
+            
+            data_rows.append(new_row)
+            added_count += 1
+            
+        # 전체 데이터 정렬 (회차 내림차순, 세트 오름차순, 게임 오름차순)
+        def final_sort_key(x):
+            try:
+                r = -int(x[idx_round]) if x[idx_round] else 0
+                s = int(x[idx_set]) if x[idx_set] else 0
+                g_num = int(x[idx_game]) if x[idx_game] else 0
+                return (r, s, g_num)
+            except: return (0, 0, 0)
+            
+        data_rows.sort(key=final_sort_key)
+            
+        # 시트 비우고 다시 쓰기
+        ws.delete_rows(1, ws.max_row)
+        for c, header in enumerate(headers, 1):
+            ws.cell(1, c, value=header)
+            
+        for r_idx, r_data in enumerate(data_rows, 2):
+            for c_idx, val in enumerate(r_data, 1):
+                ws.cell(r_idx, c_idx, value=val)
+                
+        wb.save(xlsx_path)
+        wb.close()
+
+        # JSON 즉시 갱신
+        try:
+            from utils.convert_to_json import convert_xlsx_to_json
+            convert_xlsx_to_json()
+        except Exception as e:
+            logger.error('[Lotto023] JSON 변환 실패: %s', e)
+
+        return jsonify(returnValue='success', count=added_count), 200, CORS_HEADERS
+
+    except PermissionError:
+        return jsonify(returnValue='fail', error='Lotto023.xlsx 파일이 다른 프로그램에서 열려 있습니다.'), 200, CORS_HEADERS
+    except Exception as e:
+        logger.error('[Lotto023] 저장 중 오류: %s', e)
+        return jsonify(returnValue='fail', error=str(e)), 200, CORS_HEADERS
+
+
 # --- 정적 파일 (루트 및 하위 경로) ---
 def _mimetype_with_charset(path):
     """한글 깨짐 방지: 텍스트 파일에 charset=utf-8 적용"""
@@ -901,6 +1022,8 @@ def _mimetype_with_charset(path):
         return 'application/javascript; charset=utf-8'
     if p.endswith('.css'):
         return 'text/css; charset=utf-8'
+    if p.endswith('.json'):
+        return 'application/json; charset=utf-8'
     return None
 
 
@@ -916,7 +1039,7 @@ def static_file(path):
     full = (BASE_DIR / path).resolve()
     base_resolved = BASE_DIR.resolve()
     if not str(full).startswith(str(base_resolved)) or not full.is_file():
-        print('[404] 파일 없음: /%s  (기대 경로: %s)' % (path, full))
+        logger.warning('[404] 파일 없음: /%s (기대 경로: %s)', path, full)
         return '404 - 파일을 찾을 수 없습니다.', 404, {'Content-Type': 'text/plain; charset=utf-8'}
     resp = send_from_directory(BASE_DIR, path)
     mimetype = _mimetype_with_charset(path)
@@ -935,11 +1058,11 @@ if __name__ == '__main__':
     # 서버 시작 시 JSON 파일 갱신 (Lotto023.xlsx 수정 사항 반영)
     try:
         from utils.convert_to_json import convert_xlsx_to_json
-        print('[초기화] XLSX -> JSON 변환 시작...')
+        logger.info('[초기화] XLSX -> JSON 변환 시작...')
         convert_xlsx_to_json()
     except Exception as e:
-        print('[초기화] JSON 변환 실패: %s' % e)
+        logger.error('[초기화] JSON 변환 실패: %s', e)
 
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() in ('1', 'true', 'yes')
-    print('서버 시작: http://localhost:%s/' % PORT)
+    logger.info('서버 시작: http://localhost:%s/ (Debug: %s)', PORT, debug_mode)
     app.run(host='0.0.0.0', port=PORT, debug=debug_mode)
