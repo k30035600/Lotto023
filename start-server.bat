@@ -2,10 +2,10 @@
 cd /d "%~dp0"
 
 echo [INFO] 패키지 설치 확인 중...
-py -m pip install -r requirements.txt
+REM py -m pip install -r requirements.txt
 
 echo [INFO] Playwright 브라우저 설치 확인 중...
-py -m playwright install chromium
+REM py -m playwright install chromium
 
 echo.
 echo [INFO] 로또 서버를 시작합니다...

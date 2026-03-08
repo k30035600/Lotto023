@@ -21,36 +21,40 @@
 
     <main class="page-body">
         <div class="main-container">
-            <!-- 좌측 패널 (당첨통계) -->
-            <div class="panel-box">
+            <!-- 좌측 패널 (통계공) -->
+            <div class="panel-box panel-box-stats">
                 <div id="statsPanel" class="stats-panel left-panel">
                     <h2>
-                        <span>당첨통계</span>
+                        <span>통계공</span>
                         <div id="aiChatButton" class="ai-chat-button" title="AI 로또 분석">🤖 AI 분석</div>
                     </h2>
                     <div id="dateRangeBox" class="stats-box">
-                        <div class="range-row">
-                            <label class="range-radio-label"><input type="radio" name="rangeType" value="round" checked>
-                                회차</label>
-                            <div class="range-input-group" id="roundInputRow">
-                                <input type="number" id="startRound" class="range-input" placeholder="시작" min="1"
-                                    max="9999">
-                                <span class="range-tilde">~</span>
-                                <input type="number" id="endRound" class="range-input" placeholder="종료" min="1"
-                                    max="9999">
+                        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <input type="radio" id="rangeTypeRound" name="rangeType" value="round" checked>
+                                    <label for="rangeTypeRound"
+                                        style="font-size: 0.9rem; white-space: nowrap;">조회회차:</label>
+                                    <input type="number" id="startRound" class="range-input" placeholder="시작" min="1"
+                                        max="9999">
+                                    <span id="startRoundDate" style="font-size:0.8rem; color:#666;"></span>
+                                    <span class="range-tilde">~</span>
+                                    <input type="number" id="endRound" class="range-input" placeholder="종료" min="1"
+                                        max="9999">
+                                    <span id="endRoundDate" style="font-size:0.8rem; color:#666;"></span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <input type="radio" id="rangeTypeDate" name="rangeType" value="date">
+                                    <label for="rangeTypeDate"
+                                        style="font-size: 0.9rem; white-space: nowrap;">조회기간:</label>
+                                    <input type="text" id="startDate" class="range-input" placeholder="yy/mm/dd"
+                                        maxlength="8">
+                                    <span class="range-tilde">~</span>
+                                    <input type="text" id="endDate" class="range-input" placeholder="yy/mm/dd"
+                                        maxlength="8">
+                                </div>
                             </div>
-                        </div>
-                        <div class="range-row">
-                            <label class="range-radio-label"><input type="radio" name="rangeType" value="period">
-                                기간</label>
-                            <div class="range-input-group" id="dateInputRow">
-                                <input type="text" id="startDate" class="range-input" placeholder="yymmdd">
-                                <span class="range-tilde">~</span>
-                                <input type="text" id="endDate" class="range-input" placeholder="yymmdd">
-                            </div>
-                        </div>
-                        <div class="date-range-button">
-                            <button id="selectDateRangeBtn" class="filter-btn">조회</button>
+                            <button id="selectDateRangeBtn" class="filter-btn" style="align-self: center;">조회</button>
                         </div>
                     </div>
                     <div class="stats-sort">
@@ -65,17 +69,17 @@
                         </select>
                     </div>
                     <div id="statsList" class="stats-list">
-                        <p>당첨통계/회차별당첨번호 로딩중</p>
+                        <p>통계공/당첨공 로딩중</p>
                     </div>
                 </div>
             </div>
 
-            <!-- 중앙 패널 (게임 패널) -->
-            <div class="panel-box">
+            <!-- 중앙 패널 (선택공/게임공/저장공) -->
+            <div class="panel-box panel-box-game">
                 <div class="game-panel center-panel">
                     <!-- 선택공 그리드 영역 (JS에서 stats-box로 감싸 동적 생성) -->
 
-                    <!-- 선택박스 -->
+                    <!-- 선택공 -->
                     <div id="filterBox" class="stats-box">
                         <div class="filter-container">
                             <select id="oddEvenFilter">
@@ -114,14 +118,54 @@
                         </div>
                     </div>
 
-                    <!-- 게임박스 -->
+                    <!-- 게임공 -->
                     <div id="gameBox" class="stats-box">
+                        <h2 style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                            <span>게임공</span>
+                            <div style="display: flex; gap: 8px; margin-left: auto;">
+                                <button id="goldenAiBtnHeader" onclick="generateGoldenAiGames()" title="황금조합 생성">🤖 AI
+                                    황금조합</button>
+                            </div>
+                        </h2>
                         <div id="gameSetsContainer">
                             <!-- 1~5게임이 여기에 동적으로 생성됩니다 -->
                         </div>
                     </div>
 
-                    <!-- 저장박스 -->
+                    <!-- 프리미엄 AI 분석 박스 (신규 추가) -->
+                    <div id="premiumAiBox" class="stats-box"
+                        style="display: none; border: 2px dashed #FFD700; background: #ffffff; padding: 15px;">
+                        <h2
+                            style="font-size: 1.1rem; color: #D4961A; border-bottom: 2px solid #FBBC05; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                            🏆 AI PREMIUM LUCKY TICKET
+                            <span style="font-size: 0.8rem; cursor: pointer; color: #999;"
+                                onclick="togglePremiumAiBox()">닫기 ×</span>
+                        </h2>
+
+                        <div id="premiumTicketArea" style="text-align: center; margin-bottom: 15px;">
+                            <!-- 캔버스는 숨기고 이미지만 보여줄 수도 있지만, 일단 캔버스를 보이게 배치 -->
+                            <canvas id="premiumTicketCanvas" width="400" height="280"
+                                style="max-width: 100%; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);"></canvas>
+                        </div>
+
+                        <div id="premiumAnalysis"
+                            style="background: #fff; padding: 12px; border-radius: 8px; font-size: 0.85rem; line-height: 1.6; border: 1px solid #eee; margin-bottom: 15px; color: #333;">
+                            <!-- AI 분석 텍스트가 여기에 표시됩니다 -->
+                        </div>
+
+                        <div style="display: flex; gap: 8px;">
+                            <button id="copySnsBtn"
+                                style="flex: 1; padding: 10px; border-radius: 20px; border: none; background: #FFD700; color: #000; font-weight: bold; cursor: pointer;">
+                                메시지 코드로 복사 📤
+                            </button>
+                            <button id="downloadTicketBtn"
+                                style="flex: 1; padding: 10px; border-radius: 20px; border: none; background: #34A853; color: #fff; font-weight: bold; cursor: pointer;">
+                                티켓 저장/카톡전송 💾
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 저장공 (원위치 복구) -->
                     <div id="saveBox" class="stats-box">
                         <div class="save-container">
                             <input type="number" id="saveRound" placeholder="회차" disabled />
@@ -129,8 +173,18 @@
                         </div>
                     </div>
 
-                    <!-- 결과박스 -->
+                    <!-- 저장공 (결과) -->
                     <div id="resultBox" class="stats-box">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <h2 style="margin: 0; min-width: 60px;">저장공</h2>
+                            <div id="resultSummary"
+                                style="font-size: 0.85rem; color: #333; text-align: center; flex: 1; padding: 0 10px; font-weight: 500;">
+                            </div>
+                            <div style="text-align: right; min-width: 60px;">
+                                <button id="deleteSelectedBtn" disabled
+                                    style="background: none; border: 1px solid #ccc; color: #ccc; border-radius: 4px; padding: 2px 8px; cursor: default; font-size: 0.75rem; transition: all 0.2s;">선택삭제</button>
+                            </div>
+                        </div>
                         <div id="resultContainer">
                             <p class="result-placeholder">저장된 결과가 없습니다.</p>
                         </div>
@@ -138,17 +192,15 @@
                 </div>
             </div>
 
-            <!-- 우측 패널 (회차별 당첨번호) -->
-            <div class="panel-box">
+            <!-- 우측 패널 (당첨공) -->
+            <div class="panel-box panel-box-win">
                 <div id="viewNumbersPanel" class="stats-panel right-panel">
                     <div class="view-numbers-header">
-                        <h2 id="roundNumbersTitle" class="view-numbers-title-left">회차별 당첨번호</h2>
+                        <h2 id="roundNumbersTitle" class="view-numbers-title-left">당첨공</h2>
                         <span id="statsHeaderDisplay" class="view-numbers-stats-center">[ 0000회, 전체 평균: 000 ]</span>
-                        <input type="number" id="sumFilterRound" value="999" min="0" max="999" placeholder="999"
-                            title="000=회차↑ 999=회차↓ 777=합계↑ 888=합계↓ 21~255=동일합계" class="sum-filter-round-input" />
                     </div>
                     <div id="viewNumbersList" class="stats-list view-numbers-inline">
-                        <p>당첨통계/회차별당첨번호 로딩중</p>
+                        <p>통계공/당첨공 로딩중</p>
                     </div>
                 </div>
             </div>
@@ -166,15 +218,15 @@
                 </div>
             </div>
         </div>
-
-        <footer id="mainFooter" class="page-footer" style="cursor: pointer;">
-            <div class="footer-content">
-                <p>© 2024 로또 번호 생성기 (클릭하여 분석 그래프 표시/숨기기)</p>
-            </div>
-        </footer>
     </main>
 
-    <!-- 최신 추첨정보 모달 (회차별 당첨번호 클릭 시 · 동행복권 파싱 결과) -->
+    <footer id="mainFooter" class="page-footer" style="cursor: pointer;">
+        <div class="footer-content">
+            <p>© 2024 로또 번호 생성기 (클릭하여 분석 그래프 표시/숨기기)</p>
+        </div>
+    </footer>
+
+    <!-- 최신 추첨정보 모달 (당첨공 클릭 시 · 동행복권 파싱 결과) -->
     <div id="latestLottoModal" class="latest-lotto-modal" aria-hidden="true">
         <div class="latest-lotto-modal-inner">
             <div class="latest-lotto-modal-header">
@@ -220,7 +272,7 @@
     <script src="modules/filters.js"></script>
 
     <!-- 메인 애플리케이션 -->
-    <script src="app.js?v=2.3"></script>
+    <script src="app.js?v=2.5"></script>
 
 </body>
 

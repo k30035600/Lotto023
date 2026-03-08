@@ -924,7 +924,16 @@ def api_save_lotto023():
         
         # 각 게임별로 세트/게임 번호 부여
         for g in new_games:
-            target_round = int(g['회차'])
+            raw_round = g.get('회차')
+            if not raw_round:
+                logger.warning('[Lotto023] 게임 데이터에 회차 정보가 누락되었습니다: %s', g)
+                continue
+            
+            try:
+                target_round = int(raw_round)
+            except (ValueError, TypeError):
+                logger.warning('[Lotto023] 유효하지 않은 회차 형식입니다: %s', raw_round)
+                continue
             
             # 해당 회차의 기존 데이터 찾기
             round_data = []
@@ -1014,6 +1023,157 @@ def api_save_lotto023():
     except Exception as e:
         logger.error('[Lotto023] 저장 중 오류: %s', e)
         return jsonify(returnValue='fail', error=str(e)), 200, CORS_HEADERS
+
+
+@app.route('/api/delete-lotto023', methods=['POST', 'OPTIONS'])
+def api_delete_lotto023():
+    """Lotto023 게임 데이터를 Lotto023.xlsx에서 삭제."""
+    if request.method == 'OPTIONS':
+        return '', 204, CORS_OPTIONS_HEADERS
+
+    try:
+        data = request.get_json(silent=True)
+        if not data or 'items' not in data:
+            return jsonify(returnValue='fail', error='삭제할 데이터 정보가 없습니다.'), 400, CORS_HEADERS
+
+        import openpyxl
+        xlsx_path = (BASE_DIR / '.source' / 'Lotto023.xlsx').resolve()
+        if not xlsx_path.exists():
+            return jsonify(returnValue='fail', error='Lotto023.xlsx 파일이 없습니다.'), 404, CORS_HEADERS
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        
+        headers = [str(ws.cell(1, c).value).strip() if ws.cell(1, c).value is not None else '' for c in range(1, ws.max_column + 1)]
+        idx_round = headers.index('회차') if '회차' in headers else None
+        idx_set = headers.index('세트') if '세트' in headers else None
+        idx_game = headers.index('게임') if '게임' in headers else None
+
+        if idx_round is None or idx_game is None:
+             wb.close()
+             return jsonify(returnValue='fail', error='필수 컬럼(회차, 게임)을 찾을 수 없습니다.'), 500, CORS_HEADERS
+
+        items_to_del = data['items'] # [ {round, set, game}, ... ]
+        
+        # 삭제 대상 필터링 (메모리상에서 처리 후 시트 갱신이 안전)
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        new_rows = []
+        deleted_count = 0
+        
+        for r in rows:
+            if not r or r[0] is None: continue
+            
+            is_match = False
+            round_val = str(r[idx_round])
+            set_val = str(r[idx_set]) if idx_set is not None else ''
+            game_val = str(r[idx_game])
+            
+            for item in items_to_del:
+                if str(item['round']) == round_val and str(item['game']) == game_val:
+                    # 세트가 있으면 세트까지 비교
+                    if idx_set is not None:
+                        if str(item.get('set', '')) == set_val:
+                            is_match = True
+                            break
+                    else:
+                        is_match = True
+                        break
+            
+            if is_match:
+                deleted_count += 1
+            else:
+                new_rows.append(r)
+        
+        # 데이터 다시 쓰기
+        ws.delete_rows(2, ws.max_row)
+        for r_idx, r_data in enumerate(new_rows, 2):
+            for c_idx, val in enumerate(r_data, 1):
+                ws.cell(r_idx, c_idx, value=val)
+        
+        wb.save(xlsx_path)
+        wb.close()
+
+        # JSON 즉시 갱신
+        try:
+            from utils.convert_to_json import convert_xlsx_to_json
+            convert_xlsx_to_json()
+        except Exception as e:
+            logger.error('[Lotto023] 삭제 후 JSON 변환 실패: %s', e)
+
+        return jsonify(returnValue='success', deleted=deleted_count), 200, CORS_HEADERS
+
+    except Exception as e:
+        logger.error('[Lotto023] 삭제 중 오류: %s', e)
+        return jsonify(returnValue='fail', error=str(e)), 200, CORS_HEADERS
+
+
+@app.route('/api/delete-all-lotto023', methods=['POST', 'OPTIONS'])
+def api_delete_all_lotto023():
+    """Lotto023 모든 데이터를 삭제."""
+    if request.method == 'OPTIONS':
+        return '', 204, CORS_OPTIONS_HEADERS
+
+    try:
+        import os, openpyxl
+        xlsx_path = os.path.join(FILE_DIR, 'Lotto023.xlsx')
+        if not os.path.exists(xlsx_path):
+            return jsonify(returnValue='success', message='파일이 없습니다.'), 200, CORS_HEADERS
+
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        
+        # 헤더(1행) 제외하고 내용이 있는 경우 삭제
+        if ws.max_row > 1:
+            # 모든 데이터 행 삭제 (2행부터 끝까지)
+            ws.delete_rows(2, ws.max_row)
+            wb.save(xlsx_path)
+            wb.close()
+            
+            # JSON 캐시 즉시 갱신
+            try:
+                from utils.convert_to_json import convert_xlsx_to_json
+                convert_xlsx_to_json()
+            except Exception as e:
+                logger.error('[Lotto023] 전체 삭제 후 JSON 변환 실패: %s', e)
+
+        return jsonify(returnValue='success'), 200, CORS_HEADERS
+    except Exception as e:
+        logger.error('[Lotto023] 전체 삭제 중 오류: %s', e)
+        return jsonify(returnValue='fail', error=str(e)), 200, CORS_HEADERS
+
+@app.route('/api/save-ticket-desktop', methods=['POST', 'OPTIONS'])
+def api_save_ticket_desktop():
+    """프리미엄 티켓 이미지를 바탕화면에 저장."""
+    if request.method == 'OPTIONS':
+        return '', 204, CORS_OPTIONS_HEADERS
+
+    try:
+        data = request.get_json(silent=True)
+        if not data or 'image' not in data or 'round' not in data:
+            return jsonify(returnValue='fail', error='데이터가 올바르지 않습니다.'), 400, CORS_HEADERS
+
+        import base64
+        import os
+        from pathlib import Path
+
+        desktop_path = Path.home() / 'Desktop'
+        
+        image_data = data['image']
+        round_no = data['round']
+
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+
+        file_name = f"Lotto_Premium_Ticket_{round_no}회.png"
+        file_path = desktop_path / file_name
+
+        with open(file_path, "wb") as fh:
+            fh.write(base64.b64decode(image_data))
+
+        return jsonify(returnValue='success', path=str(file_path)), 200, CORS_HEADERS
+    except Exception as e:
+        logger.error('[save-ticket-desktop] 바탕화면 저장 오류: %s', e)
+        return jsonify(returnValue='fail', error=str(e)), 500, CORS_HEADERS
 
 
 # --- 정적 파일 (루트 및 하위 경로) ---
