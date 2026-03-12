@@ -182,19 +182,26 @@ function normalizeLottoData(data) {
             normalized.game = Number(item['게임']);
         }
 
-        // 6. 홀짝 -> oddEven
-        if (item['홀짝'] !== undefined) {
-            normalized.oddEven = item['홀짝'];
+        // 6. 홀짝 -> oddEven (null/빈값이면 번호에서 계산)
+        if (item['홀짝'] != null && item['홀짝'] !== '') {
+            normalized.oddEven = Number(item['홀짝']);
+        } else if (normalized.numbers && normalized.numbers.length === 6) {
+            normalized.oddEven = normalized.numbers.filter(n => n % 2 === 1).length;
         }
 
-        // 7. 연속 -> sequence
-        if (item['연속'] !== undefined) {
-            normalized.sequence = item['연속'];
+        // 7. 연속 -> sequence (null/빈값이면 번호에서 계산)
+        if (item['연속'] != null && item['연속'] !== '') {
+            normalized.sequence = Number(item['연속']);
+        } else if (normalized.numbers && normalized.numbers.length === 6) {
+            const s = [...normalized.numbers].sort((a, b) => a - b);
+            let cnt = 0;
+            for (let i = 1; i < s.length; i++) { if (s[i] - s[i - 1] === 1) cnt++; }
+            normalized.sequence = cnt;
         }
 
-        // 8. 핫콜 -> hotCold
-        if (item['핫콜'] !== undefined) {
-            normalized.hotCold = item['핫콜'];
+        // 8. 핫콜 -> hotCold (null/빈값은 렌더링 시 계산)
+        if (item['핫콜'] != null && item['핫콜'] !== '') {
+            normalized.hotCold = Number(item['핫콜']);
         }
 
         // 9. 게임선택 -> gameMode
@@ -272,22 +279,7 @@ async function loadLotto023Data(basePath = '') {
         return cached;
     }
 
-    // 2. JSON 로드 시도
-    try {
-        const jsonUrl = `${basePath}.source/Lotto023.json`;
-        const data = await loadJSON(jsonUrl);
-
-        if (data.length > 0) {
-            const normalized = normalizeLottoData(data);
-            saveToCache(CACHE_KEYS.LOTTO023, normalized);
-            console.timeEnd('LoadLotto023');
-            return normalized;
-        }
-    } catch (error) {
-        console.warn('JSON 로드 실패, XLSX 시도:', error);
-    }
-
-    // 3. XLSX 로드 (fallback)
+    // 2. XLSX 로드 (원본 데이터 소스)
     try {
         const xlsxUrl = `${basePath}.source/Lotto023.xlsx`;
         const data = await loadXLSX(xlsxUrl);
@@ -299,7 +291,7 @@ async function loadLotto023Data(basePath = '') {
             return normalized;
         }
     } catch (error) {
-        console.error('XLSX 로드 실패:', error);
+        console.error('Lotto023 XLSX 로드 실패:', error);
     }
 
     console.timeEnd('LoadLotto023');

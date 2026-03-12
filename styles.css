@@ -11,100 +11,96 @@
     --spacing-lg: 8px;
     --spacing-xl: 10px;
     --spacing-xxl: 12px;
+    --panel-padding: clamp(10px, 1.5vw, 15px);
+    --ball-size: 22px;
+    --ball-font: 0.8rem;
+    --ball-size-sm: 22px;
+    --ball-font-sm: 0.8rem;
 
     /*
-     * 팔레트 쳋학: 따뜻한 크림 + 머티드 파스텔
-     * 로또 공 고유색: 노란(#FBC400) / 하늘파란(#69C8F2)
-     *   / 살구빨강(#FF7272) / 회색(#AAAAAA) / 연두(#B0D840)
-     * 위 공들이 살아 숨쉬도록 배경은 크림, 패널은 파스텔
+     * 나눔과어울림 ShareHarmony · MyRisk Color Palette
+     * 기본 3색: MyBank(#1565C0) · MyCard(#6A1B9A) · MyCash(#E65100)
+     * 공통색: Primary(#263238) · Action(#546E7A) · Text(#1A1A1A)
      */
 
-    /* ── 바디/기반 ── */
-    --color-body: #F7F4EF;
-    /* 따뜻한 크림 배경 */
-    --color-primary: #3D4F6B;
-    /* 따뜻한 슬레이트 네이비 - 헤더/푸터 */
-    --color-border: #DDD8CE;
-    /* 따뜻한 회색 테두리 */
-    --color-border-dark: #3D4F6B;
+    /* ── 공통색 (Common) ── */
+    --color-body: #F0F2F5;
+    --color-primary: #263238;
+    --color-primary-dark: #1B2631;
+    --color-border: #B0BEC5;
+    --color-border-dark: #37474F;
     --color-bg-white: #FFFFFF;
-    --color-bg-light: #F7F4EF;
-    --color-bg-lighter: #F0ECE4;
-    --color-text-primary: #2C2C2C;
-    /* 진한 차콜 - 읽기 쉬운 */
-    --color-text-secondary: #6B7280;
-    --color-accent: #D4961A;
-    /* 따뜻한 골드 */
+    --color-bg-light: #F0F2F5;
+    --color-bg-lighter: #E8EAED;
+    --color-text-primary: #1A1A1A;
+    --color-text-secondary: #334155;
+    --color-accent: #546E7A;
+    --color-harmony-bg: #F0F2F5;
+    --color-harmony-border: #B0BEC5;
+    --color-golden: #EBC658;
+    --color-golden-light: #ffecb3;
+    --color-text-muted: #546E7A;
+    --color-error: #C62828;
 
-    /* ── Google 4색 (로고 참고) ── */
-    --google-blue: #4285F4;
-    --google-red: #EA4335;
-    --google-yellow: #FBBC05;
-    --google-green: #34A853;
+    /* ── 동행복권 공인 컬러 ── */
+    --lotto-yellow: #FBC400;
+    --lotto-blue: #69C8F2;
+    --lotto-red: #FF7272;
+    --lotto-gray: #AAAAAA;
+    --lotto-green: #B0D840;
 
-    /* ── 패널 배경 계층화 (new.png 스타일) ── */
-    --panel-side-bg: #F4FAF4;
-    /* 아주 연한 민트빛 화이트 (좌/우) */
-    --panel-mid-bg: #EBF5E6;
-    /* 중앙 패널: new.png의 메인 배경색 (상쾌한 민트) */
+    /* ── Google 4색 (ShareHarmony/MyRisk 조화 버전) ── */
+    --google-blue: #1565C0;
+    --google-red: #C62828;
+    --google-yellow: #EBC658;
+    --google-green: #546E7A;
 
-    /* ── 좌 패널 (통계) : 우측 당첨공 패널과 동일한 그린 패턴 적용 ── */
-    --panel-left-bg: var(--panel-side-bg);
-    --panel-left-box: var(--panel-right-box);
-    --panel-left-sort: #DCE7D3;
-    /* 그린 계열의 정렬바 */
-    --panel-left-item: var(--panel-right-item);
-    --panel-left-accent: var(--panel-right-accent);
-    --panel-left-border: var(--panel-right-border);
+    /* ── 패널 배경 계층화 ── */
+    --panel-side-bg: #F0F2F5;
+    --panel-mid-bg: #FFFFFF;
 
-    /* ── 중 패널 (게임) : 구글 레드 포인트 ── */
+    /* ── 좌 패널 (통계) : MyBank 블루 ── */
+    --panel-left-bg: #E8F0FE;
+    --panel-left-box: #FFFFFF;
+    --panel-left-sort: #E8F0FE;
+    --panel-left-item: #FFFFFF;
+    --panel-left-accent: #1565C0;
+    --panel-left-border: #0A3D91;
+
+    /* ── 중 패널 (게임) : MyCash 오렌지 ── */
     --panel-mid-bg-var: var(--panel-mid-bg);
-    --panel-mid-box: #FFF1F0;
-    /* 아주 연한 빨간빛 박스 */
-    --panel-mid-item: #FDE2E1;
-    --panel-mid-accent: #D93025;
-    /* 더 선명한 구글 레드 */
-    --panel-mid-border: #EA4335;
+    --panel-mid-box: #FFF3E0;
+    --panel-mid-item: #FFFFFF;
+    --panel-mid-accent: #E65100;
+    --panel-mid-border: #E65100;
 
-    /* ── 우 패널 (당첨) : 구글 그린 포인트 ── */
-    --panel-right-bg: var(--panel-side-bg);
-    --panel-right-box: #EBF5E6;
-    /* new.png 리스트 배경색과 일치 */
-    --panel-right-item: #DCE7D3;
-    --panel-right-accent: #1E8E3E;
-    --panel-right-border: #34A853;
+    /* ── 우 패널 (당첨) : MyCard 퍼플 ── */
+    --panel-right-bg: #F3E5F5;
+    --panel-right-box: #F3E5F5;
+    --panel-right-item: #E1BEE7;
+    --panel-right-accent: #6A1B9A;
+    --panel-right-border: #6A1B9A;
 
-    /*
-     * 필터박스 → 따뜻한 호박색 허니앙버
-     * 로또공 노란(#FBC400)과 조화 - 사용자의 시선을 잡아줌
-     */
-    --filter-box-bg: #FFFBF0;
-    /* 크림 케이크 */
-    --filter-box-border: #D4961A;
-    /* 호박색 */
-    --filter-btn-bg: #FFF3CD;
-    /* 버터스카치 크림 */
-    --filter-btn-active: #D4961A;
-    /* 활성: 호박색 */
+    /* ── 필터박스 ── */
+    --filter-box-bg: #FFFFFF;
+    --filter-box-border: #B0BEC5;
+    --filter-btn-bg: #FFFFFF;
+    --filter-btn-active: #546E7A;
 
     /* ── 입력 필드 ── */
-    --input-bg: #E8E8E8;
-    /* 모든 입력 필드 배경색 (회색) */
-    --input-border: #9E9E9E;
-    /* 선명한 회색 테두리 */
-    --input-focus: #2E6DB4;
+    --input-bg: #FFFFFF;
+    --input-border: #B0BEC5;
+    --input-focus: #1565C0;
 
     /* ── 드롭다운(select) ── */
-    --dropdown-bg: #FDFCFA;
-    /* 따뜻한 화이트 */
-    --dropdown-border: #C4BAB0;
+    --dropdown-bg: #FFFFFF;
+    --dropdown-border: #B0BEC5;
     --dropdown-active: #E8F0FE;
 
-    /* ── AI 요소: 따뜻한 태양 오렌지 ── */
-    --ai-color: #E07722;
-    /* 따뜻한 오렌지 */
-    --ai-color-dark: #B85C10;
-    --ai-bg: #FFF4E6;
+    /* ── AI 요소 ── */
+    --ai-color: #E65100;
+    --ai-color-dark: #BF360C;
+    --ai-bg: #FFF3E0;
 
     /* Border Radius */
     --radius-sm: 4px;
@@ -119,32 +115,36 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Noto Sans KR", sans-serif;
     font-display: swap;
     margin: 0;
     padding: 0;
-    min-height: 100vh;
+    height: 100vh;
+    /* FHD 높이 고정 */
     width: 100%;
     display: flex;
     flex-direction: column;
-    background: var(--color-body, #F7F4EF);
-    /* 따뜻한 크림 */
+    background-color: var(--color-body);
+    background-image:
+        linear-gradient(rgba(38, 50, 56, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(38, 50, 56, 0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
     color: var(--color-text-primary);
-    contain: layout style paint;
-    overflow-x: hidden;
+    overflow: hidden;
+    /* 페이지 전체 스크롤 방지 */
 }
 
 .page-header {
     width: 100%;
-    height: 100px;
-    background: linear-gradient(135deg, #3D4F6B 0%, #2C3E55 60%, #1E3048 100%);
-    border-bottom: 3px solid #D4961A;
-    /* 호박색 하단선 - 따뜻함 강조 */
-    padding: 0 clamp(var(--spacing-xxl), 2vw, 24px);
+    height: 80px;
+    background: var(--color-primary);
+    border-bottom: 4px solid var(--panel-left-accent);
+    padding: 0 40px;
     display: flex;
     align-items: center;
     flex-shrink: 0;
-    box-shadow: 0 3px 12px 0 rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 10;
 }
 
 .header-content {
@@ -160,7 +160,7 @@ body {
 
 .header-content h1 {
     font-size: clamp(1.2rem, 3vw, 1.5rem);
-    color: #FFFFFF;
+    color: var(--color-bg-white);
     font-weight: 600;
     letter-spacing: -0.02em;
     transition: transform 0.3s ease;
@@ -170,6 +170,24 @@ body {
     transform: scale(1.05);
 }
 
+.header-action-btn {
+    width: 72px;
+    height: 36px;
+    padding: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-bg-white);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.header-action-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
 .header-nav {
     display: flex;
     gap: 12px;
@@ -177,23 +195,25 @@ body {
 
 .page-body {
     flex: 1;
+    min-height: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-md);
-    padding: clamp(var(--spacing-lg), 1.5vw, 16px);
+    padding: 0 10px;
 }
 
 .page-footer {
     width: 100%;
-    height: 50px;
-    background: linear-gradient(135deg, #2C3E55 0%, #1E3048 100%);
-    border-top: 2px solid #D4961A;
-    padding: 0 clamp(12px, 2vw, 24px);
+    height: 48px;
+    background: var(--color-primary);
+    border-top: 2px solid var(--panel-left-accent);
+    padding: 0 24px;
     display: flex;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
-    box-shadow: 0 -3px 12px 0 rgba(0, 0, 0, 0.15);
+    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.15);
+    z-index: 10;
 }
 
 .footer-content {
@@ -201,7 +221,7 @@ body {
     max-width: 100%;
     margin: 0 auto;
     text-align: center;
-    color: #FFFFFF;
+    color: var(--color-bg-white);
     opacity: 0.9;
     padding: 0 20px;
     box-sizing: border-box;
@@ -209,142 +229,219 @@ body {
     font-weight: 500;
 }
 
+/* ============================================================
+   세 패널(통계공/게임공/결과공) 동일 높이 레이아웃
+   page-body(flex-col) → main-container(flex-row) → panel-box(flex-col) → 내부 패널
+   ============================================================ */
 .main-container {
     display: flex;
-    gap: clamp(8px, 1.5vw, 16px);
+    flex-direction: row;
+    justify-content: center;
+    align-items: stretch;
+    gap: 15px;
     width: 100%;
     max-width: 100%;
     margin: 0 auto;
-    height: 760px;
-    min-height: 760px;
-    max-height: 760px;
-    justify-content: center;
-    align-items: stretch;
-    flex-wrap: wrap;
-    contain: layout style;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: clamp(5px, 1vw, 10px);
+    flex: 1 1 0%;
+    min-height: 0;
+    border: none;
+    padding: 0;
     box-sizing: border-box;
+    background: transparent;
+    overflow: hidden;
 }
 
+/* 래퍼(.panel-box): 중앙 게임 패널 극대화, 좌/우 최소화 */
 .panel-box {
+    flex: 1 1 0%;
+    min-width: 180px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    min-height: 0;
+    overflow: hidden;
+    /* 부모(.main-container)가 flex:1로 page-body를 채우므로 100% = 동일 높이 */
     height: 100%;
+    max-height: 100%;
+    background: transparent;
+    border: none;
+    padding: 0;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+/* 헤더 패널 토글 버튼 그룹 */
+.panel-toggle-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.panel-toggle-btn {
+    padding: 5px 14px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    background: var(--color-harmony-bg);
+    border: 1.5px solid var(--color-harmony-border);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+    line-height: 1.3;
+}
+
+.panel-toggle-btn:hover {
+    background: var(--color-harmony-border);
+}
+
+.panel-toggle-btn.active {
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
+}
+
+/* 접힌 상태: 패널 숨김 */
+.panel-box.collapsed > .stats-panel,
+.panel-box.collapsed > .game-panel,
+.panel-box.collapsed > #viewNumbersPanel {
+    display: none;
+}
+
+.panel-box.collapsed {
+    flex: 0 0 auto;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+}
+
+/* 내부 패널: 래퍼 높이를 꽉 채움 + 카드 스타일 */
+.stats-panel,
+.game-panel,
+#viewNumbersPanel {
+    flex: 1 1 0%;
+    min-height: 0;
+    background: var(--color-bg-white);
+    border-radius: 0;
+    border: none;
+    padding: 0;
+    box-shadow: none;
     width: 100%;
-    min-width: 480px;
-    flex: 1 1 calc(33.333% - clamp(8px, 1.5vw, 16px) * 2);
-    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+}
+
+/* 패널별 테마 보더 — 상단 악센트만 유지 */
+.panel-box-stats .stats-panel {
+    border-top: 3px solid var(--panel-left-accent);
+}
+
+.panel-box-game .game-panel {
+    border-top: 3px solid var(--panel-mid-accent);
+}
+
+.panel-box-win #viewNumbersPanel {
+    border-top: 3px solid var(--panel-right-accent);
+}
+
+/* 패널 내부 박스: 모든 콘텐츠를 감싸는 사각 박스 */
+.panel-inner {
+    flex: 1 1 0%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: none;
+    background: var(--color-bg-white, #fff);
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 /* 화면 너비가 줄어들어 겹칠(wrap) 때의 순서 제어 */
 @media (max-width: 1480px) {
-    .panel-box-game {
-        order: 1;
+    .main-container {
+        flex-wrap: wrap;
     }
-
-    /* 중앙 패널이 가장 위로 */
-    .panel-box-win {
-        order: 2;
-    }
-
-    /* 당첨공 패널이 중간 */
-    .panel-box-stats {
-        order: 3;
-    }
-
-    /* 통계공 패널이 마지막 */
+    .panel-box-game { order: 1; }
+    .panel-box-win  { order: 2; }
+    .panel-box-stats { order: 3; }
 }
 
-/* 좌: 통계공 패널 → 구글 블루 계열 */
-.stats-panel {
-    background: var(--panel-left-bg);
-    border-radius: 6px;
-    border: 2px solid var(--panel-left-border);
-    padding: clamp(8px, 1.5vw, 10px);
-    box-shadow: 0 2px 8px 0 rgba(52, 168, 83, 0.15);
-    /* 블루 -> 그린 그림자 */
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    flex: 1;
-    transition: box-shadow 0.3s ease;
+.panel-box-stats,
+.panel-box-game,
+.panel-box-win {
+    flex: 1 1 0%;
+    min-width: 0;
+    max-width: none;
 }
 
-.stats-panel:hover {
-    box-shadow: 0 4px 12px 0 rgba(52, 168, 83, 0.25);
-    /* 블루 -> 그린 그림자 */
+.panel-box-win {
+    container-type: inline-size;
+    container-name: win-panel;
 }
 
-/* 중: 게임공 패널 → 구글 레드 계열 + 따뜻한 크림배경 */
+@container win-panel (max-width: 400px) {
+    .round-minmax-display {
+        display: none !important;
+    }
+}
+
+.stats-panel:hover,
+.game-panel:hover,
+#viewNumbersPanel:hover {
+    box-shadow: none;
+}
+
+.stats-panel > *,
+.game-panel > *,
+#viewNumbersPanel > * {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* 게임공 패널: 스크롤바 제거 (저장공에서만 스크롤) */
 .game-panel {
-    background: var(--panel-mid-bg);
-    border-radius: 6px;
-    border: 3px solid var(--panel-mid-border);
-    /* 테두리를 조금 더 굵게 하여 존재감 부여 */
-    padding: clamp(8px, 1.5vw, 10px);
-    box-shadow: 0 4px 15px 0 rgba(234, 67, 53, 0.12);
-    /* 그림자도 더 깊게 */
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-height: 0;
-    overflow-y: auto;
+    overflow-y: hidden;
     overflow-x: hidden;
-    flex: 1;
-    transition: box-shadow 0.3s ease;
 }
 
-.game-panel:hover {
-    box-shadow: 0 4px 12px 0 rgba(234, 67, 53, 0.25);
-}
-
-/* 통계공(좌) 패널 h2 → 블루 */
-.stats-panel h2 {
-    font-size: clamp(1.1rem, 2.5vw, 1.3rem);
-    margin: 0;
-    margin-bottom: clamp(8px, 1.5vw, 12px);
-    padding: 0;
+/* Panel Headers (Shared Style) */
+.stats-panel h2,
+.game-panel h2,
+#viewNumbersPanel h2,
+#historyPanel h2 {
+    color: white !important;
+    padding: 14px 20px;
+    border-radius: 0;
+    margin: 0 0 15px 0;
+    font-size: 1.2rem;
+    font-weight: 800;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    color: var(--panel-left-accent);
-    font-weight: 700;
     line-height: 1.2;
-    min-height: auto;
+    box-shadow: 0 4px 10px rgba(38, 50, 56, 0.12);
 }
 
-/* 게임공(중) 패널 h2 → 레드 */
-.game-panel h2 {
-    font-size: clamp(1.1rem, 2.5vw, 1.3rem);
-    margin: 0;
-    margin-bottom: clamp(8px, 1.5vw, 12px);
-    padding: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: var(--panel-mid-accent);
-    font-weight: 700;
-    line-height: 1.2;
-    min-height: auto;
+/* 패널별 헤더 테마 */
+.panel-box-stats .stats-panel h2 {
+    background: var(--panel-left-accent);
 }
 
-#statsHeaderDisplay {
-    font-size: clamp(0.75rem, 2vw, 0.85rem);
-    color: var(--panel-left-accent);
-    font-weight: bold;
-    white-space: nowrap;
-    font-family: 'Courier New', Courier, monospace;
+.panel-box-game .game-panel h2 {
+    background: var(--panel-mid-accent);
 }
+
+.panel-box-win #viewNumbersPanel h2,
+#historyPanel h2 {
+    background: var(--panel-right-accent);
+}
+
+/* #resultRoundRange 스타일은 인라인으로 적용 */
 
 /* 회차별 당첨번호 헤더: 좌측 제목, 가운데 [N회 평균], 우측 3자리 입력 */
 .view-numbers-header {
@@ -377,7 +474,7 @@ body {
     padding: 4px 6px;
     font-size: 0.9rem;
     text-align: center;
-    border: 1px solid #808080;
+    border: 1px solid var(--input-border);
     border-radius: 4px;
     flex: 0 0 auto;
 }
@@ -423,7 +520,7 @@ body {
 }
 
 .load-error {
-    color: #c00;
+    color: var(--color-error);
     font-weight: 500;
     padding: 8px;
     white-space: normal;
@@ -441,16 +538,17 @@ body {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: clamp(2px, 0.5vw, 4px);
+    padding: 0 4px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-/* 당첨공 리스트 박스 → 그린 계열 */
+/* 당첨공 리스트 박스 */
 .view-numbers-inline {
-    background: var(--panel-right-box);
-    border: 2px solid var(--panel-right-border);
-    border-radius: 6px;
-    padding: 6px;
-    box-shadow: 0 1px 3px 0 rgba(52, 168, 83, 0.12);
+    background: var(--panel-right-bg);
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 .round-number-line {
@@ -458,54 +556,37 @@ body {
     align-items: center;
     gap: clamp(4px, 1vw, 8px);
     padding: 0 8px;
-    height: 25px;
-    min-height: 25px;
+    min-height: 24px;
+    height: 24px;
     box-sizing: border-box;
-    border-radius: 4px;
-    transition: background-color 0.2s ease;
-    opacity: 0.8;
-    flex-wrap: wrap;
+    border-radius: 0;
+    transition: background-color 0.15s ease;
+    flex-wrap: nowrap;
+    border-bottom: none;
 }
 
 .round-number-line:hover {
     background-color: var(--panel-right-item);
-    opacity: 1;
 }
 
 .round-sum-display {
-    padding: 10px;
+    padding: 0;
 }
 
 .round-date-display {
-    padding: 10px;
+    padding: 0;
 }
 
-/* 우: 당첨공 패널 → 구글 그린 계열 */
-#viewNumbersPanel {
-    height: 100%;
-    min-height: 0;
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    display: flex;
-    flex-direction: column;
-    background: var(--panel-right-bg);
-    border: 2px solid var(--panel-right-border);
-    border-radius: 6px;
-    padding: clamp(8px, 1.5vw, 10px);
-    box-shadow: 0 2px 8px 0 rgba(52, 168, 83, 0.15);
-}
 
-#statsPanel {
-    height: 100%;
-    min-height: 0;
-    flex: 1;
-}
 
 #statsList {
-    background: #ddd7cc;
-    border-radius: 6px;
-    padding: 4px 6px;
+    background: var(--color-bg-white);
+    border-radius: 0;
+    padding: 8px;
+    border: none;
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: none;
     content-visibility: auto;
     contain-intrinsic-size: auto 200px;
 }
@@ -514,7 +595,7 @@ body {
     max-height: calc(100vh - 450px);
     min-height: 150px;
     overflow-y: auto;
-    color: #000000;
+    color: var(--color-text-primary);
 }
 
 /* 정렬바: 좌 패널 sort 계열 */
@@ -524,7 +605,7 @@ body {
     gap: 4px;
     margin-bottom: clamp(2px, 0.5vw, 4px);
     background: var(--panel-left-sort);
-    border: 1px solid var(--panel-left-border);
+    border: none;
     border-radius: 6px;
     padding: clamp(2px, 0.5vw, 4px);
 }
@@ -536,7 +617,7 @@ body {
     border-radius: 4px;
     border: 1px solid var(--dropdown-border);
     background: var(--dropdown-bg);
-    color: #000000;
+    color: var(--color-text-primary);
     font-size: clamp(0.7rem, 1.6vw, 0.8rem);
     font-weight: 700;
     cursor: pointer;
@@ -551,16 +632,16 @@ body {
 .stats-sort button:hover {
     background: var(--panel-left-sort);
     border-color: var(--panel-left-accent);
-    color: #000000;
-    box-shadow: 0 1px 3px rgba(66, 133, 244, 0.2);
+    color: var(--color-text-primary);
+    box-shadow: 0 1px 3px rgba(21, 101, 192, 0.2);
 }
 
 .stats-sort button.active {
     background: var(--panel-left-accent);
     border-color: var(--panel-left-accent);
-    color: #ffffff;
+    color: var(--color-bg-white);
     font-weight: 700;
-    box-shadow: 0 2px 4px rgba(66, 133, 244, 0.35);
+    box-shadow: 0 2px 4px rgba(21, 101, 192, 0.35);
 }
 
 .stats-sort button.blink {
@@ -579,7 +660,7 @@ body {
     border-radius: 4px;
     border: 1px solid var(--dropdown-border);
     background: var(--dropdown-bg);
-    color: #000000;
+    color: var(--color-text-primary);
     font-size: clamp(0.7rem, 1.6vw, 0.8rem);
     font-weight: 700;
     cursor: pointer;
@@ -598,33 +679,164 @@ body {
 .stats-sort .seq-filter-select.active {
     background: var(--dropdown-active);
     border-color: var(--panel-left-accent);
-    color: #1a237e;
+    color: var(--color-border-dark);
 }
 
-/* 박스: 좌 패널(통계공) box */
+/* 박스: 패널 내 통합 섹션 (통제된 너비) */
 .stats-box {
     background: var(--panel-left-box);
-    border: 1px solid var(--panel-left-border);
-    border-radius: var(--radius-md);
-    padding: clamp(8px, 1.5vw, 10px);
+    border: none;
+    border-radius: 0;
+    padding: clamp(8px, 1vw, 12px);
     margin-bottom: 0;
     width: 100%;
     box-sizing: border-box;
-    box-shadow: 0 1px 3px 0 rgba(66, 133, 244, 0.1);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
     transition: box-shadow 0.3s ease;
 }
 
-.stats-box:hover {
-    box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.15);
-    border-color: #000000;
+/* 게임공/결과공 상단 스페이서 (통계공 dateRangeBox + stats-sort 높이에 맞춤) */
+.panel-top-spacer {
+    height: 38px;
+    flex-shrink: 0;
 }
 
-/* 게임코 내 stats-box → 레드 계열로 오버라이드 */
-.game-panel>.stats-box {
-    margin-bottom: 0;
+/* 옵션필터 박스 */
+.option-filter-box {
+    flex-shrink: 0;
+    padding: 4px 8px;
+}
+
+.option-filter-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 3px;
+    flex-wrap: wrap;
+}
+
+.option-filter-select {
+    height: 24px;
+    padding: 0 2px;
+    font-size: 0.72rem;
+    border: 1px solid var(--input-border, #E0E0E0);
+    border-radius: 4px;
+    background: var(--color-bg-white, #fff);
+    cursor: pointer;
+    flex: 0 0 auto;
+    width: auto;
+}
+
+.filter-dropdown {
+    width: 68px;
+    flex: 0 0 68px;
+    text-align: center;
+}
+
+.option-filter-sep {
+    color: var(--color-harmony-border);
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    margin: 0 2px;
+    margin-left: auto;
+}
+
+.option-filter-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.result-filter-text {
+    font-size: 0.78rem;
+    font-weight: bold;
+    color: var(--color-primary);
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-family: 'Courier New', Courier, monospace;
+    line-height: 1;
+}
+
+input.result-filter-text {
+    font-size: 0.78rem;
+    font-weight: bold;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.option-filter-input {
+    width: 40px;
+    height: 22px;
+    padding: 0 2px;
+    font-size: 0.7rem;
+    border: 1px solid var(--input-border, #E0E0E0);
+    border-radius: 4px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.option-filter-tilde {
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.option-filter-input::-webkit-inner-spin-button,
+.option-filter-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.center-nav-link {
+    flex: 1;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.78rem;
+    padding: 5px 0;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s, opacity 0.2s;
+    cursor: pointer;
+    white-space: nowrap;
+    text-align: center;
+    background: var(--color-accent);
+    box-sizing: border-box;
+}
+
+.center-nav-link:hover {
+    opacity: 0.85;
+}
+
+.center-nav-link.nav-active {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.stats-panel>.stats-box,
+.game-panel>.stats-box,
+.panel-inner>.stats-box {
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    padding: clamp(10px, 1.5vw, 15px);
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.stats-box h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: none;
+    color: var(--color-text-primary);
+}
+
+.game-panel>#gameBox {
     background: var(--panel-mid-box);
-    border-color: var(--panel-mid-border);
-    box-shadow: 0 1px 3px 0 rgba(234, 67, 53, 0.1);
 }
 
 /* 당첨공 h2 → 그린 */
@@ -633,24 +845,168 @@ body {
     color: var(--panel-right-accent);
 }
 
-/* 게임박스 높이 최소화 */
-#gameBox {
-    padding: clamp(4px, 1vw, 6px);
+/* ─── 선택공 + 게임공 좌우 컨테이너 ─── */
+#gridGameRow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    min-height: 200px;
+}
+
+#gridGameRow > #numberGridSection {
+    flex: 4;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 10px !important;
+    border: none !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    box-sizing: border-box;
+    background: var(--color-bg-white);
+}
+
+.number-grid-container {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 6px 3px;
+    place-items: center;
+    flex: 1;
+    min-height: 0;
+}
+
+#gridGameRow > #gameBox {
+    flex: 6;
+    min-width: 0;
+    border: none !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    padding: 6px 0 !important;
+    background: var(--panel-mid-box);
+}
+
+#gameSetsContainer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 0 !important;
+}
+
+/* 게임 세트 행 (G1~G5) — 요소 밀착 + 우측 정보 오른쪽 정렬 */
+.game-set-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    flex: 1;
+    min-height: 0;
+}
+
+.game-set-row:not(:last-child) {
+    border-bottom: none;
+}
+
+.game-set-row input[type="checkbox"] {
+    flex-shrink: 0;
+}
+
+.game-set-row .game-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.game-set-row .game-mode-btn {
+    width: 44px;
+    font-size: 0.7rem;
+    padding: 2px 0;
+    flex-shrink: 0;
+}
+
+.game-balls-wrap {
+    display: flex;
+    gap: 3px;
+    justify-content: center;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.game-right-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.game-right-group .game-sum {
+    font-size: 0.68rem;
+    font-weight: bold;
+    color: var(--color-error);
+    text-align: right;
+    min-width: 22px;
+}
+
+.game-set-row > .game-prob,
+.game-right-group .game-prob {
+    font-size: 0.6rem;
+    font-weight: bold;
+    color: #fff;
+    background: var(--color-text-muted);
+    padding: 1px 0;
+    border-radius: 8px;
+    text-align: center;
+    visibility: hidden;
+    width: 36px;
+    min-width: 36px;
+    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 /* 숫자 입력 필드 스핀 버튼 제거 (크롬, 사파리 등) */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {
     -webkit-appearance: none;
+    appearance: none;
     margin: 0;
 }
 
 /* 숫자 입력 필드 스핀 버튼 제거 (파이어폭스) */
 input[type=number] {
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
-/* dateRangeBox: 좌측 정렬 */
+/* 통계공/게임공/결과공 패널 타이틀 공통: .panel-title에서 일괄 적용 */
+
+/* 입력 필터 박스: 통계공 패널 전체 너비 */
+#statsPanel #dateRangeBox {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* 선택 필터 박스 */
+#statsPanel .stats-sort {
+    margin-bottom: 0;
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+#statsPanel .stats-sort button,
+#statsPanel .stats-sort .seq-filter-select {
+    flex: 1;
+    min-width: 0;
+}
+
+/* dateRangeBox: 조회회차/조회기간/조회 한 줄 배치 */
 #dateRangeBox {
     display: flex;
     flex-direction: row;
@@ -658,6 +1014,72 @@ input[type=number] {
     padding: 4px 6px;
     min-width: 0;
     width: 100%;
+}
+
+/* 기간선택: 조회회차 좌측, 조회기간 중간, 조회 버튼 우측 */
+/* 조회회차 | 조회기간 | 조회버튼 — 한 줄 균등 배치 */
+.date-range-one-line .date-range-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+}
+
+.date-range-one-line .date-range-fields {
+    display: contents;
+}
+
+.date-range-one-line .date-range-block {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    min-width: 0;
+    flex: 1 1 0%;
+}
+
+.date-range-one-line .date-range-block:first-child {
+    justify-content: flex-start;
+}
+
+.date-range-one-line .date-range-block:nth-child(2) {
+    justify-content: flex-start;
+}
+
+.date-range-one-line .range-label {
+    font-size: 0.85rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.date-range-one-line .range-date-hint {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.date-range-one-line .range-sep {
+    color: var(--color-text-muted);
+    margin: 0 2px;
+    font-size: 0.85rem;
+}
+
+.date-range-one-line .date-range-query-btn {
+    flex-shrink: 0;
+    width: 54px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+#statsPanel .date-range-one-line .range-input {
+    width: 52px;
+}
+
+#statsPanel .date-range-one-line #startDate,
+#statsPanel .date-range-one-line #endDate {
+    width: 72px;
 }
 
 .range-row-inline {
@@ -702,65 +1124,164 @@ input[type=number] {
     align-items: center;
     gap: 12px;
     padding: 0 8px;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--panel-left-item);
-    border: 1px solid var(--panel-left-border);
+    border: none;
     transition: all 0.2s ease;
-    height: 28px;
-    min-height: 28px;
+    height: 24px;
+    min-height: 24px;
     box-sizing: border-box;
     flex-shrink: 0;
 }
 
+/* [ShareHarmony] Global Ball Style (동행복권 컬러 대응) */
+.ball,
 .stat-ball {
-    width: 24px !important;
-    height: 24px !important;
+    width: var(--ball-size);
+    height: var(--ball-size);
+    min-width: var(--ball-size);
+    min-height: var(--ball-size);
+    aspect-ratio: 1;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 0.85rem !important;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    flex-shrink: 0 !important;
-    /* 찌그러짐 방지 */
-    aspect-ratio: 1/1;
+    font-size: var(--ball-font);
+    line-height: 1;
+    color: #333;
+    text-shadow: none;
+    background: var(--lotto-gray);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1), inset 0 -1px 2px rgba(0, 0, 0, 0.1);
+    border: none;
+    flex-shrink: 0;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    animation: fadeInBall 0.25s ease-out both;
+    box-sizing: border-box;
 }
 
-.ball.ball-yellow,
-.stat-ball.ball-yellow {
-    background: #FBC400;
-    color: #000;
+/* 작은 공 (게임 세트 행·결과공·보너스 등) */
+.ball.stat-ball--sm,
+.stat-ball.stat-ball--sm {
+    width: var(--ball-size-sm);
+    height: var(--ball-size-sm);
+    min-width: var(--ball-size-sm);
+    min-height: var(--ball-size-sm);
+    font-size: var(--ball-font-sm);
 }
 
-.ball.ball-blue,
-.stat-ball.ball-blue {
-    background: #69C8F2;
-    color: #000;
+/* 동행복권 컬러 클래스 */
+.ball.color-yellow,
+.stat-ball.color-yellow {
+    background: var(--lotto-yellow);
 }
 
-.ball.ball-red,
-.stat-ball.ball-red {
-    background: #FF7272;
-    color: #000;
+.ball.color-blue,
+.stat-ball.color-blue {
+    background: var(--lotto-blue);
 }
 
-.ball.ball-gray,
-.stat-ball.ball-gray {
-    background: #AAAAAA;
-    color: #000;
+.ball.color-red,
+.stat-ball.color-red {
+    background: var(--lotto-red);
 }
 
-.ball.ball-green,
-.stat-ball.ball-green {
-    background: #B0D840;
-    color: #000;
+.ball.color-gray,
+.stat-ball.color-gray {
+    background: var(--lotto-gray);
 }
 
-#gameSetsContainer {
+.ball.color-green,
+.stat-ball.color-green {
+    background: var(--lotto-green);
+}
+
+/* 저장공용 화이트 스타일 */
+.ball.saved-white,
+.stat-ball.saved-white {
+    background: var(--color-bg-white) !important;
+    color: var(--color-text-primary) !important;
+    border: 1px solid var(--color-border) !important;
+    box-shadow: none !important;
+}
+
+.ball.golden,
+.stat-ball.golden {
+    background: linear-gradient(135deg, var(--color-golden) 0%, var(--color-golden-light) 100%);
+    color: var(--color-primary);
+    box-shadow: 0 4px 10px rgba(241, 196, 15, 0.3), inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes fadeInBall {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* 공통 헤더 스타일은 위에서 통합 관리하므로 중복 정의 제거 */
+
+.stats-panel h2::before {
+    content: '📊';
+    font-size: 1.1rem;
+}
+
+#historyPanel h2::before {
+    content: '🏆';
+    font-size: 1.1rem;
+}
+
+/* [ShareHarmony] History Rows refinement */
+.round-number-line {
+    border-bottom: none;
+    padding: 0 8px !important;
+    height: auto !important;
+    transition: background-color 0.15s ease;
+    border-radius: 0;
+    margin-bottom: 0;
+}
+
+.round-number-line:hover {
+    background-color: var(--panel-mid-box);
+}
+
+.round-number-line .round-date-display {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* [ShareHarmony] Master Generate Button (CTA) */
+.generate-cta-btn {
+    width: 100%;
+    min-height: 60px;
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-border-dark) 100%);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-size: 1.25rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 8px 15px rgba(230, 81, 0, 0.25);
+    margin: 20px 0;
     display: flex;
-    flex-direction: column;
-    gap: 4px !important;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.generate-cta-btn::before {
+    content: '🍀';
+    font-size: 1.4rem;
+}
+
+.generate-cta-btn:hover {
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--panel-mid-accent) 100%);
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 12px 25px rgba(230, 81, 0, 0.35);
+}
+
+.generate-cta-btn:active {
+    transform: translateY(-2px) scale(0.98);
 }
 
 #saveBox {
@@ -771,12 +1292,23 @@ input[type=number] {
     padding: 2px 0;
 }
 
+/* 저장공(결과) 영역: 필요 시에만 스크롤바 표시 */
+.game-panel #resultBox {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
 #resultContainer {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .modal {
@@ -811,21 +1343,30 @@ input[type=number] {
 #goldenAiBtnHeader,
 #premiumAiToggleBtn,
 #aiChatButton {
-    width: auto !important; /* Auto width to fit content */
-    height: 36px !important; /* Slightly taller for better clickability */
+    width: auto !important;
+    /* Auto width to fit content */
+    height: 36px !important;
+    /* Slightly taller for better clickability */
     display: flex !important;
     align-items: center;
     justify-content: center;
-    font-size: 0.9rem !important; /* Slightly larger font */
-    border-radius: 18px !important; /* Corresponds to half of the new height */
-    padding: 0 20px !important; /* Adjusted padding */
+    font-size: 0.9rem !important;
+    /* Slightly larger font */
+    border-radius: 18px !important;
+    /* Corresponds to half of the new height */
+    padding: 0 20px !important;
+    /* Adjusted padding */
     box-sizing: border-box !important;
     font-weight: bold !important;
     cursor: pointer;
-    transition: all 0.2s ease-in-out; /* Smoother transition for multiple properties */
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Add depth */
-    border: none; /* Remove border, use shadow and background instead */
-    white-space: nowrap; /* Prevent text from wrapping */
+    transition: all 0.2s ease-in-out;
+    /* Smoother transition for multiple properties */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    /* Add depth */
+    border: none;
+    /* Remove border, use shadow and background instead */
+    white-space: nowrap;
+    /* Prevent text from wrapping */
 }
 
 #goldenAiBtnHeader {
@@ -835,7 +1376,8 @@ input[type=number] {
 
 #premiumAiToggleBtn,
 #aiChatButton {
-    background: #FFFBF0 !important; /* Use a light cream from the palette instead of transparent */
+    background: #FFFBF0 !important;
+    /* Use a light cream from the palette instead of transparent */
     color: var(--ai-color, #E07722) !important;
     border: 1px solid var(--ai-color, #E07722) !important;
 }
@@ -843,22 +1385,25 @@ input[type=number] {
 #goldenAiBtnHeader:hover,
 #premiumAiToggleBtn:hover,
 #aiChatButton:hover {
-    transform: translateY(-2px); /* Lift effect on hover */
-    box-shadow: 0 4px 10px rgba(0,0,0,0.15); /* Increase shadow on hover */
+    transform: translateY(-2px);
+    /* Lift effect on hover */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    /* Increase shadow on hover */
 }
 
 #goldenAiBtnHeader:active,
 #premiumAiToggleBtn:active,
 #aiChatButton:active {
-    transform: scale(0.98) translateY(0); /* Keep the press effect */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transform: scale(0.98) translateY(0);
+    /* Keep the press effect */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 #premiumAiToggleBtn[data-state="on"],
 #aiChatButton[data-state="on"] {
     background: var(--ai-color, #E07722) !important;
     color: #fff !important;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 
@@ -946,7 +1491,8 @@ input[type=number] {
     border-radius: var(--radius-lg, 8px);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     z-index: 1050;
-    display: flex; /* is set to none in html, will be changed by js */
+    display: flex;
+    /* is set to none in html, will be changed by js */
     flex-direction: column;
     overflow: hidden;
 }
@@ -993,16 +1539,16 @@ input[type=number] {
 }
 
 .ai-message.system {
-    background-color: var(--color-bg-lighter, #F0ECE4);
-    border: 1px solid var(--color-border, #DDD8CE);
-    color: var(--color-text-secondary, #6B7280);
+    background-color: var(--color-bg-lighter, #E8EAED);
+    border: 1px solid var(--color-border, #B0BEC5);
+    color: var(--color-text-secondary, #334155);
     font-size: 0.85rem;
     align-self: center;
     text-align: center;
 }
 
 .ai-message.user {
-    background-color: var(--ai-color, #E07722);
+    background-color: var(--ai-color, #E65100);
     color: white;
     align-self: flex-end;
     border-top-right-radius: 0;
@@ -1010,8 +1556,8 @@ input[type=number] {
 
 .ai-message.assistant {
     background-color: var(--color-bg-white, #FFFFFF);
-    color: var(--color-text-primary, #2C2C2C);
-    border: 1px solid var(--color-border, #DDD8CE);
+    color: var(--color-text-primary, #1A1A1A);
+    border: 1px solid var(--color-border, #B0BEC5);
     align-self: flex-start;
     border-top-left-radius: 0;
 }
@@ -1048,8 +1594,9 @@ input[type=number] {
     background: #fff;
     border: 1px solid #ccc;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 2100; /* Higher than analysis-bubble */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 2100;
+    /* Higher than analysis-bubble */
     padding: 16px;
     width: 380px;
     max-width: 90vw;
@@ -1111,3 +1658,80 @@ input[type=number] {
     border-width: 10px 10px 10px 0;
     border-color: transparent #fff transparent transparent;
 }
+
+    /* 하단 통계 그래프 컨테이너 */
+    #bottomArea {
+        position: fixed;
+        bottom: 48px; /* .page-footer height */
+        left: 0;
+        width: 100%;
+        height: 33.33vh; /* 화면 높이의 1/3 */
+        background-color: var(--color-bg-white, #FFFFFF);
+        border-top: none;
+        box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.1);
+        z-index: 999;
+        display: none;
+        flex-direction: column;
+    }
+    
+    #bottomArea.visible,
+    #bottomAreaWin.visible,
+    #bottomAreaNumber.visible {
+        display: flex;
+    }
+
+    #bottomAreaWin,
+    #bottomAreaNumber {
+        position: fixed;
+        bottom: 48px;
+        left: 0;
+        width: 100%;
+        height: 33.33vh;
+        background-color: var(--color-bg-white, #FFFFFF);
+        border-top: none;
+        box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.1);
+        z-index: 999;
+        display: none;
+        flex-direction: column;
+    }
+
+    #bottomDragHandle,
+    #bottomDragHandleWin,
+    #bottomDragHandleNumber {
+        width: 100%;
+        height: 10px;
+        background-color: #ccc;
+        cursor: ns-resize;
+    }
+    
+    .unified-bottom-panel {
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* 당첨통계 가로 스크롤 시 Y축 고정 */
+    .bottom-chart-scroll {
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+    }
+    .chart-y-axis-fixed {
+        flex-shrink: 0;
+        width: 36px;
+        min-width: 36px;
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: var(--color-harmony-bg, #E8F2EC);
+        border-right: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 4px 4px 4px 0;
+        height: calc(100% - 15px);
+        box-sizing: border-box;
+        font-size: 10px;
+        color: var(--color-text-secondary);
+        line-height: 1;
+    }
+    

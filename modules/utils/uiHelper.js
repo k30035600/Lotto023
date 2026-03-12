@@ -109,7 +109,7 @@ function createElement(tag, options = {}) {
 }
 
 /**
- * 번호 볼 요소 생성
+ * 번호 볼 요소 생성 (ShareHarmony 스타일 통합)
  * @param {number} number - 번호
  * @param {Object} options - 옵션
  * @returns {HTMLElement} 볼 요소
@@ -123,22 +123,39 @@ function createBallElement(number, options = {}) {
     } = options;
 
     const ball = createElement('div', {
-        className: `ball ball-${size}`,
+        className: 'stat-ball', // 통합된 클래스 사용
         text: number,
         attributes: {
             'data-number': number
         }
     });
 
+    // ShareHarmony: 'golden' 하이라이트 적용
+    if (typeof AppState !== 'undefined' && AppState.goldenNumbers && AppState.goldenNumbers.has(number)) {
+        ball.classList.add('golden');
+    }
+
+    if (size === 'small') {
+        ball.style.width = '24px';
+        ball.style.height = '24px';
+        ball.style.fontSize = '0.8rem';
+    } else if (size === 'large') {
+        ball.style.width = '42px';
+        ball.style.height = '42px';
+        ball.style.fontSize = '1.2rem';
+    }
+
     if (selected) {
         ball.classList.add('selected');
+        // 선택된 경우 Deep Navy 스타일 등으로 변형 가능
     }
 
     if (disabled) {
-        ball.classList.add('disabled');
+        ball.style.opacity = '0.5';
+        ball.style.cursor = 'not-allowed';
     }
 
-    if (onClick) {
+    if (onClick && !disabled) {
         ball.addEventListener('click', () => onClick(number));
         ball.style.cursor = 'pointer';
     }

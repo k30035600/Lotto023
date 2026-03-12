@@ -35,12 +35,11 @@ def _convert_file(xlsx_path, json_path):
         print(f"{os.path.basename(xlsx_path)} 변환 실패: {e}")
 
 def convert_xlsx_to_json():
-    # utils 폴더의 부모 폴더가 프로젝트 루트라고 가정
+    """Lotto645만 XLSX → JSON 변환 (Lotto023은 XLSX 직접 사용)."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     source_dir = os.path.join(base_dir, '.source')
     
     _convert_file(os.path.join(source_dir, 'Lotto645.xlsx'), os.path.join(source_dir, 'Lotto645.json'))
-    _convert_file(os.path.join(source_dir, 'Lotto023.xlsx'), os.path.join(source_dir, 'Lotto023.json'))
 
 if __name__ == '__main__':
     convert_xlsx_to_json()

@@ -1009,13 +1009,6 @@ def api_save_lotto023():
         wb.save(xlsx_path)
         wb.close()
 
-        # JSON 즉시 갱신
-        try:
-            from utils.convert_to_json import convert_xlsx_to_json
-            convert_xlsx_to_json()
-        except Exception as e:
-            logger.error('[Lotto023] JSON 변환 실패: %s', e)
-
         return jsonify(returnValue='success', count=added_count), 200, CORS_HEADERS
 
     except PermissionError:
@@ -1093,13 +1086,6 @@ def api_delete_lotto023():
         wb.save(xlsx_path)
         wb.close()
 
-        # JSON 즉시 갱신
-        try:
-            from utils.convert_to_json import convert_xlsx_to_json
-            convert_xlsx_to_json()
-        except Exception as e:
-            logger.error('[Lotto023] 삭제 후 JSON 변환 실패: %s', e)
-
         return jsonify(returnValue='success', deleted=deleted_count), 200, CORS_HEADERS
 
     except Exception as e:
@@ -1129,13 +1115,6 @@ def api_delete_all_lotto023():
             wb.save(xlsx_path)
             wb.close()
             
-            # JSON 캐시 즉시 갱신
-            try:
-                from utils.convert_to_json import convert_xlsx_to_json
-                convert_xlsx_to_json()
-            except Exception as e:
-                logger.error('[Lotto023] 전체 삭제 후 JSON 변환 실패: %s', e)
-
         return jsonify(returnValue='success'), 200, CORS_HEADERS
     except Exception as e:
         logger.error('[Lotto023] 전체 삭제 중 오류: %s', e)
@@ -1219,13 +1198,13 @@ def static_file(path):
 
 
 if __name__ == '__main__':
-    # 서버 시작 시 JSON 파일 갱신 (Lotto023.xlsx 수정 사항 반영)
+    # 서버 시작 시 Lotto645 JSON 갱신
     try:
         from utils.convert_to_json import convert_xlsx_to_json
-        logger.info('[초기화] XLSX -> JSON 변환 시작...')
+        logger.info('[초기화] Lotto645 XLSX -> JSON 변환 시작...')
         convert_xlsx_to_json()
     except Exception as e:
-        logger.error('[초기화] JSON 변환 실패: %s', e)
+        logger.error('[초기화] Lotto645 JSON 변환 실패: %s', e)
 
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() in ('1', 'true', 'yes')
     logger.info('서버 시작: http://localhost:%s/ (Debug: %s)', PORT, debug_mode)

@@ -80,7 +80,10 @@ function calculateAppearanceStats(lottoData, maxNumber = 45) {
 function calculatePercentageStats(statsMap, totalRounds, maxNumber = 45) {
     const percentageMap = new Map();
 
-    if (totalRounds === 0) {
+    let totalCount = 0;
+    statsMap.forEach((count) => { totalCount += count; });
+
+    if (totalCount === 0) {
         for (let i = 1; i <= maxNumber; i++) {
             percentageMap.set(i, 0);
         }
@@ -88,7 +91,7 @@ function calculatePercentageStats(statsMap, totalRounds, maxNumber = 45) {
     }
 
     statsMap.forEach((count, number) => {
-        const percentage = (count / totalRounds) * 100;
+        const percentage = (count / totalCount) * 100;
         percentageMap.set(number, percentage);
     });
 

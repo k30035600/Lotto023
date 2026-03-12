@@ -1,3 +1,38 @@
+/** ShareHarmony · MyRisk 팔레트 (동행볼 제외, UI 일관용) */
+const SHAREHARMONY_PALETTE = {
+    primaryNavy: '#263238',
+    primary: '#263238',
+    primaryDark: '#1B2631',
+    accent: '#546E7A',
+    accentLight: '#B0BEC5',
+    white: '#FFFFFF',
+    black: '#000000',
+    textPrimary: '#1A1A1A',
+    textSecondary: '#334155',
+    textMuted: '#546E7A',
+    border: '#B0BEC5',
+    error: '#C62828',
+    golden: '#EBC658',
+    goldenLight: '#ffecb3',
+    goldenDark: '#b8860b',
+    goldenTicket: '#d4af37',
+    myBankBlue: '#1565C0',
+    myBankDark: '#0A3D91',
+    myCardPurple: '#6A1B9A',
+    myCardDark: '#38006B',
+    myCashOrange: '#E65100',
+    income: '#1565C0',
+    expense: '#C62828',
+    greenAccent: '#546E7A',
+    greenBtn: '#1565C0',
+    greenBtnDark: '#0A3D91',
+    aiOrange: '#E65100',
+    aiOrangeBorder: '#BF360C',
+    bgLight: '#F0F2F5',
+    bgLighter: '#E8EAED',
+    selectionBorder: '#1565C0'
+};
+
 /** API 서버 베이스 URL 가져오기 */
 function getApiBaseUrl() {
     // Railway 등 배포 환경에서는 현재 도메인을 사용, 로컬 테스트 시에는 localhost:8000 등이 될 수 있음
@@ -66,9 +101,11 @@ function calculateAppearanceStats(rounds) {
  */
 function calculatePercentageStats(statsMap, totalRounds) {
     const map = new Map();
-    if (!totalRounds || totalRounds === 0) return map;
+    let totalCount = 0;
+    statsMap.forEach((count) => { totalCount += count; });
+    if (totalCount === 0) return map;
     statsMap.forEach((count, num) => {
-        map.set(num, (count / totalRounds) * 100);
+        map.set(num, (count / totalCount) * 100);
     });
     return map;
 }
@@ -82,6 +119,7 @@ async function initializeStats(lottoData) {
 
     // 당첨공(회차별 당첨번호)은 이 데이터만 사용 (Lotto645.xlsx 전용, API 병합 없음)
     AppState.allLotto645Data = lottoData;
+    AppState._pastWinKeySet = null;
     AppState.currentStatsRounds = lottoData || [];
 
     // 회차 및 합계 범위 설정
@@ -232,44 +270,65 @@ function getFilteredNumbersByCount(highCount = true) {
 }
 
 /**
+ * 핫/콜 번호 정렬 및 분류
+ * 정렬 기준: 1) 당첨횟수(보너스 제외) 내림차순, 2) 출현횟수(보너스 포함) 내림차순, 3) 번호 오름차순
+ * 핫: 상위 23개 (최다빈도순), 콜: 하위 22개 (최소빈도순)
+ */
+function sortAndSplitHotCold(winStatsMap, appearanceStatsMap) {
+    var sorted = Array.from(winStatsMap.entries())
+        .map(function (e) {
+            return { number: e[0], count: e[1], appCount: (appearanceStatsMap && appearanceStatsMap.get(e[0])) || 0 };
+        })
+        .sort(function (a, b) {
+            if (b.count !== a.count) return b.count - a.count;
+            if (b.appCount !== a.appCount) return b.appCount - a.appCount;
+            return a.number - b.number;
+        });
+    var hot = sorted.slice(0, 23).map(function (s) { return s.number; });
+    var cold = sorted.slice(23).reverse().map(function (s) { return s.number; });
+    return { hot: hot, cold: cold };
+}
+
+/**
  * 전체 데이터를 기준으로 한 핫/콜 번호 계산 및 반환
  */
 function getOverallHotColdNumbers() {
     if (!AppState.allLotto645Data || AppState.allLotto645Data.length === 0) {
         return { hot: [], cold: [] };
     }
-
     if (AppState.overallHotColdCache) return AppState.overallHotColdCache;
 
-    const overallWinStatsMap = calculateWinStats(AppState.allLotto645Data);
-    const sortedStats = Array.from(overallWinStatsMap.entries())
-        .map(([number, count]) => ({ number, count }))
-        .sort((a, b) => b.count - a.count);
-
-    const halfLength = Math.ceil(sortedStats.length / 2);
-    const hot = sortedStats.slice(0, halfLength).map(stat => stat.number);
-    const cold = sortedStats.slice(halfLength).map(stat => stat.number);
-
-    AppState.overallHotColdCache = { hot, cold };
+    var winMap = calculateWinStats(AppState.allLotto645Data);
+    var appMap = calculateAppearanceStats(AppState.allLotto645Data);
+    AppState.overallHotColdCache = sortAndSplitHotCold(winMap, appMap);
     return AppState.overallHotColdCache;
 }
 
 /**
- * 핫/콜 번호 계산 및 반환
- * @returns {Object} {hot: 핫 번호 배열, cold: 콜 번호 배열}
+ * 1회 ~ targetRound 직전까지의 데이터로 핫/콜 번호 계산
  */
-function getHotColdNumbers() {
-    if (!AppState.winStats || AppState.winStats.length === 0) {
+function getHotColdNumbersBeforeRound(targetRound) {
+    if (!AppState.allLotto645Data || AppState.allLotto645Data.length === 0) {
         return { hot: [], cold: [] };
     }
+    var filtered = AppState.allLotto645Data.filter(r => r.round < targetRound);
+    if (filtered.length === 0) return { hot: [], cold: [] };
+    var winMap = calculateWinStats(filtered);
+    var appMap = calculateAppearanceStats(filtered);
+    return sortAndSplitHotCold(winMap, appMap);
+}
 
-    const sortedStats = AppState.winStats.slice().sort((a, b) => b.count - a.count);
-    const halfLength = Math.ceil(sortedStats.length / 2);
-
-    const hot = sortedStats.slice(0, halfLength).map(stat => stat.number);
-    const cold = sortedStats.slice(halfLength).map(stat => stat.number);
-
-    return { hot, cold };
+/**
+ * 현재 조회 범위 데이터를 기준으로 한 핫/콜 번호 계산 및 반환
+ */
+function getHotColdNumbers() {
+    var data = AppState.currentStatsRounds || AppState.allLotto645Data;
+    if (!data || data.length === 0) {
+        return { hot: [], cold: [] };
+    }
+    var winMap = calculateWinStats(data);
+    var appMap = calculateAppearanceStats(data);
+    return sortAndSplitHotCold(winMap, appMap);
 }
 
 /**
@@ -608,14 +667,19 @@ function selectNumbersWithOddEvenRatio(pool, existingNumbers, totalNeeded) {
 /**
  * 6개 번호 선택 (기본)
  */
-function pickSix() {
+function pickSix(excludeNumbers = []) {
     const pool = shuffledPool(false, false);
     const poolSet = new Set(pool);
     let filteredPool = pool;
 
+    if (excludeNumbers.length > 0) {
+        const exSet = new Set(excludeNumbers);
+        filteredPool = filteredPool.filter(n => !exSet.has(n));
+    }
+
     if (isStatFilter(AppState.activeFilters.statFilter)) {
         const highCountNumbers = new Set(getFilteredNumbersByCount(true));
-        filteredPool = pool.filter(n => highCountNumbers.has(n));
+        filteredPool = filteredPool.filter(n => highCountNumbers.has(n));
     }
 
     // 핫콜 필터: 수동선택 또는 자동선택 모드에서만 적용
@@ -684,44 +748,42 @@ function getComplementaryColor(hex) {
 
     // 밝은 배경이면 어두운 글자, 어두운 배경이면 밝은 글자
     if (brightness > 128) {
-        return '#000000'; // 어두운 글자
+        return SHAREHARMONY_PALETTE.black;
     } else {
-        return '#FFFFFF'; // 밝은 글자
+        return SHAREHARMONY_PALETTE.white;
     }
 }
 
 /**
- * 통계용 공 생성
+ * 통계용/게임용 공 생성 (ShareHarmony 스타일 적용)
  */
-function createStatBall(num, size = 24, fontSize = "0.8rem", isNonMatching = false) {
+/**
+ * 번호에 따른 동행복권 컬러 클래스 반환
+ */
+function getBallColorClass(num) {
+    if (num <= 10) return "color-yellow";
+    if (num <= 20) return "color-blue";
+    if (num <= 30) return "color-red";
+    if (num <= 40) return "color-gray";
+    return "color-green";
+}
+
+function createStatBall(num, size = 22, fontSize = "0.8rem", isNonMatching = false) {
     const ball = document.createElement("div");
+
+    // 기본 클래스: 가변 크기(CSS --ball-size). 작은 공은 stat-ball--sm
+    const isSmall = size <= 28;
+    ball.className = "stat-ball " + getBallColorClass(num) + (isSmall ? " stat-ball--sm" : "");
+
     if (isNonMatching) {
-        ball.className = "stat-ball";
-        ball.style.backgroundColor = "#000000";
-        ball.style.color = "#ffffff";
-        ball.style.border = "2px solid #000000";
+        ball.style.backgroundColor = SHAREHARMONY_PALETTE.primaryNavy;
+        ball.style.color = SHAREHARMONY_PALETTE.white;
     } else {
-        ball.className = `stat-ball ${getBallClass(num)}`;
-
-        // 배경색에 따른 보색 계산 및 적용
-        const bgColors = {
-            'ball-yellow': '#FBC400', // 공식 노란색 (1-10)
-            'ball-blue': '#69C8F2',   // 공식 파란색 (11-20)
-            'ball-red': '#FF7272',    // 공식 빨간색 (21-30)
-            'ball-gray': '#AAAAAA',   // 공식 회색 (31-40)
-            'ball-green': '#B0D840'   // 공식 녹색 (41-45)
-        };
-
-        const ballClass = getBallClass(num);
-        const bgColor = bgColors[ballClass] || '#808080';
-        const textColor = getComplementaryColor(bgColor);
-
-        // 인라인 스타일로 보색 적용
-        ball.style.color = textColor;
+        if (AppState.goldenNumbers && AppState.goldenNumbers.has(num)) {
+            ball.classList.add('golden');
+        }
     }
-    ball.style.width = `${size}px`;
-    ball.style.height = `${size}px`;
-    ball.style.fontSize = fontSize;
+
     ball.textContent = num;
     return ball;
 }
@@ -729,7 +791,7 @@ function createStatBall(num, size = 24, fontSize = "0.8rem", isNonMatching = fal
 /**
  * 플러스 기호 생성
  */
-function createPlusSign(style = "color: #ffd54f; font-weight: bold; margin: 0 2px;") {
+function createPlusSign(style = "color: " + SHAREHARMONY_PALETTE.golden + "; font-weight: bold; margin: 0 2px;") {
     const plus = document.createElement("span");
     plus.style.cssText = style;
     plus.textContent = "+";
@@ -776,9 +838,8 @@ async function initializeApp() {
             if (keysToRemove.length > 0) { /* Lotto645 관련 localStorage 키 제거 */ }
         } catch (e) { /* localStorage 비활성화 등 무시 */ }
 
-        // XLSX 파일에서 데이터 로드 (서버 경로: /.source/Lotto645.xlsx)
         const lotto645Data = await loadFunc();
-        // 서버의 Lotto645.xlsx 실제 행 수와 비교해 캐시 여부 검증
+        AppState.previousDataCount = lotto645Data ? lotto645Data.length : 0;
         try {
             const metaRes = await fetch(getApiBaseUrl() + '/api/lotto645-meta', { cache: 'no-store' });
             const meta = await metaRes.json().catch(() => ({}));
@@ -872,12 +933,19 @@ async function initializeApp() {
                 }
             }
 
-            // 날짜 입력 필드 포맷 자동 정리 (blur 시)
+            // 날짜 입력 필드 포맷 자동 정리 (blur 시): 조회기간 yy/mm/dd 검증 및 치환
             startDateInput.addEventListener('blur', function () {
-                const value = this.value.trim();
+                let value = this.value.trim();
                 if (!value) {
                     updateRoundDisplay();
                     return;
+                }
+
+                // 8자리, 00000000, yyyy-mm-dd, yyyy/mm/dd → yy/mm/dd 치환
+                const normalized = normalizeToYYMMDD(value);
+                if (normalized !== null) {
+                    this.value = normalized;
+                    value = normalized;
                 }
 
                 // 4자리 이내 숫자는 회차로 처리
@@ -925,30 +993,45 @@ async function initializeApp() {
                     return;
                 }
 
-                // yy/mm/dd 형식인 경우
+                // yy/mm/dd 형식인 경우: 검증 후 정규화
+                const yymmddCheck = validateYYMMDDInput(value);
+                if (!yymmddCheck.valid) {
+                    if (value.includes('/') || /^\d{6,8}$/.test(value.replace(/\D/g, ''))) {
+                        alert(yymmddCheck.message || '조회기간은 yy/mm/dd 형식으로 입력해 주세요.');
+                        this.value = '';
+                        updateRoundDisplay();
+                        return;
+                    }
+                }
                 const date = parseDate(value);
                 if (date && date !== '000000' && date !== '999999') {
                     this.value = formatDateYYMMDD(date);
                     updateRoundDisplay();
                     updateRoundRangeDisplay();
-                    // 종료일과 비교 검증
                     if (!validateDateRange()) {
                         this.value = '';
                         updateRoundDisplay();
                         return;
                     }
                 } else {
-                    alert('날짜 또는 회차 형식이 올바르지 않습니다.');
+                    alert('날짜 또는 회차 형식이 올바르지 않습니다. (조회기간: yy/mm/dd)');
                     this.value = '';
                     updateRoundDisplay();
                 }
             });
 
             endDateInput.addEventListener('blur', function () {
-                const value = this.value.trim();
+                let value = this.value.trim();
                 if (!value) {
                     updateRoundDisplay();
                     return;
+                }
+
+                // 8자리, 00000000, yyyy-mm-dd, yyyy/mm/dd → yy/mm/dd 치환
+                const normalized = normalizeToYYMMDD(value);
+                if (normalized !== null) {
+                    this.value = normalized;
+                    value = normalized;
                 }
 
                 // 4자리 이내 숫자는 회차로 처리
@@ -996,27 +1079,45 @@ async function initializeApp() {
                     return;
                 }
 
-                // yy/mm/dd 형식인 경우
+                // yy/mm/dd 형식인 경우: 검증 후 정규화
+                const yymmddCheckEnd = validateYYMMDDInput(value);
+                if (!yymmddCheckEnd.valid) {
+                    if (value.includes('/') || /^\d{6,8}$/.test(value.replace(/\D/g, ''))) {
+                        alert(yymmddCheckEnd.message || '조회기간은 yy/mm/dd 형식으로 입력해 주세요.');
+                        this.value = '';
+                        updateRoundDisplay();
+                        return;
+                    }
+                }
                 const date = parseDate(value);
                 if (date && date !== '000000' && date !== '999999') {
                     this.value = formatDateYYMMDD(date);
                     updateRoundDisplay();
                     updateRoundRangeDisplay();
-                    // 시작일과 비교 검증
                     if (!validateDateRange()) {
                         this.value = '';
                         updateRoundDisplay();
                         return;
                     }
                 } else {
-                    alert('날짜 또는 회차 형식이 올바르지 않습니다.');
+                    alert('날짜 또는 회차 형식이 올바르지 않습니다. (조회기간: yy/mm/dd)');
                     this.value = '';
                     updateRoundDisplay();
                 }
             });
 
-            // 입력 중에도 실시간으로 변환 (입력 완료 시)
+            // 입력 중 실시간 변환: 8자리, 00000000, yyyy-mm-dd, yyyy/mm/dd → yy/mm/dd 치환
+            function applyDateInputFormat(el) {
+                const value = el.value.trim();
+                const normalized = normalizeToYYMMDD(value);
+                if (normalized !== null && normalized !== value) {
+                    el.value = normalized;
+                    updateRoundRangeDisplay();
+                }
+            }
+
             startDateInput.addEventListener('input', function () {
+                applyDateInputFormat(this);
                 const value = this.value.trim();
 
                 // 4자리 이내 숫자 입력 완료 시 회차로 변환
@@ -1028,7 +1129,7 @@ async function initializeApp() {
                                 this.value = dateStr;
                                 updateRoundRangeDisplay();
                             }
-                        }, 500); // 입력 완료 후 0.5초 뒤 변환
+                        }, 500);
                     }
                     return;
                 }
@@ -1053,6 +1154,7 @@ async function initializeApp() {
             });
 
             endDateInput.addEventListener('input', function () {
+                applyDateInputFormat(this);
                 const value = this.value.trim();
 
                 // 4자리 이내 숫자 입력 완료 시 회차로 변환
@@ -1070,7 +1172,7 @@ async function initializeApp() {
                     return;
                 }
 
-                // 6자리 숫자 입력 완료 시 날짜로 변환 → 해당 날짜를 포함하는 회차의 날짜로 변환
+                // 6자리 숫자 입력 완료 시 날짜로 변환
                 if (/^\d{6}$/.test(value)) {
                     const isStartDate = this.id === 'startDate';
                     const roundDate = convertDateToRoundDate(value, isStartDate);
@@ -1131,11 +1233,20 @@ async function initializeApp() {
         AppState.currentSort = 'number-asc';
         updateSortButtons('number');
 
+        // 필터 이벤트 리스너 설정
+        setupFilterListeners();
+
+        // [ShareHarmony] 마스터 생성 버튼 리스너 추가
+        const masterGenBtn = document.getElementById('masterGenerateBtn');
+        if (masterGenBtn) {
+            masterGenBtn.addEventListener('click', generateGoldenAiGames);
+        }
+
         // 게임박스 초기화
         initializeGameBox();
         // 구간선택 기본값 반영 및 3자리만 입력·가운데 정렬
-        const sumStartEl = document.getElementById('sumRangeStart');
-        const sumEndEl = document.getElementById('sumRangeEnd');
+        const sumStartEl = document.getElementById('filterAvgLow');
+        const sumEndEl = document.getElementById('filterAvgHigh');
         if (sumStartEl && AppState.sumRangeStart != null) sumStartEl.value = AppState.sumRangeStart;
         if (sumEndEl && AppState.sumRangeEnd != null) sumEndEl.value = AppState.sumRangeEnd;
         [sumStartEl, sumEndEl].forEach(el => {
@@ -1179,38 +1290,14 @@ async function initializeApp() {
             .then(res => res.json())
             .then(data => {
                 const titleEl = document.querySelector('h1');
-                if (titleEl) {
-                    if (data.startTime) {
-                        const timeSpan = document.createElement('span');
-                        timeSpan.style.fontSize = '0.65rem';
-                        timeSpan.style.fontWeight = 'bold';
-                        timeSpan.style.marginLeft = '12px';
-                        timeSpan.style.color = '#ffffff';
-                        timeSpan.textContent = ` (로딩시간: ${data.startTime})`;
-                        titleEl.appendChild(timeSpan);
-                    }
-
-                    // 타이틀 클릭 시 초기화 및 서버 종료
-                    titleEl.style.cursor = 'pointer';
-                    titleEl.title = '클릭 시 모든 데이터 초기화 및 서버 종료';
-                    titleEl.addEventListener('click', () => {
-                        if (confirm('모든 데이터를 초기화하고 서버를 종료하시겠습니까?')) {
-                            // 로컬 스토리지 초기화
-                            localStorage.clear();
-                            // 서버 종료 요청
-                            fetch('/api/shutdown', { method: 'POST' })
-                                .then(() => {
-                                    alert('서버가 종료되었습니다. 브라우저 창을 닫아주세요.');
-                                    window.close(); // 동작하지 않을 수 있음 (브라우저 정책)
-                                    document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;"><h1>서버가 종료되었습니다.</h1><p>창을 닫아주세요.</p></div>';
-                                })
-                                .catch(() => {
-                                    alert('서버 종료 요청 중 오류가 발생했습니다.');
-                                });
-                        }
-                    });
-
-
+                if (titleEl && data.startTime) {
+                    const timeSpan = document.createElement('span');
+                    timeSpan.style.fontSize = '0.65rem';
+                    timeSpan.style.fontWeight = 'bold';
+                    timeSpan.style.marginLeft = '12px';
+                    timeSpan.style.color = SHAREHARMONY_PALETTE.white;
+                    timeSpan.textContent = ` (로딩시간: ${data.startTime})`;
+                    titleEl.appendChild(timeSpan);
                 }
             })
             .catch(err => { /* Server time fetch failed */ });
@@ -1232,116 +1319,57 @@ function renderNumberGrid() {
     let sortedStats = [...AppState.winStats];
 
     // 통계공의 정렬 방식에 따라 선택공 그리드 정렬
+    const appMap = AppState.appearanceStatsMap || new Map();
+    const winMap = AppState.winStatsMap || new Map();
     if (AppState.currentSort === 'win-desc') {
-        // 당첨순▼: 내림차순
-        sortedStats.sort((a, b) => b.count - a.count);
+        sortedStats.sort((a, b) => (b.count - a.count) || ((appMap.get(b.number) || 0) - (appMap.get(a.number) || 0)) || (a.number - b.number));
     } else if (AppState.currentSort === 'win-asc') {
-        // 당첨순▲: 오름차순
-        sortedStats.sort((a, b) => a.count - b.count);
+        sortedStats.sort((a, b) => (a.count - b.count) || ((appMap.get(a.number) || 0) - (appMap.get(b.number) || 0)) || (b.number - a.number));
     } else if (AppState.currentSort === 'appearance-desc') {
-        // 출현순▼: 보너스 포함, 내림차순
-        sortedStats = Array.from(AppState.appearanceStatsMap.entries())
+        sortedStats = Array.from(appMap.entries())
             .map(([number, count]) => ({ number, count }))
-            .sort((a, b) => b.count - a.count);
+            .sort((a, b) => (b.count - a.count) || ((winMap.get(b.number) || 0) - (winMap.get(a.number) || 0)) || (a.number - b.number));
     } else if (AppState.currentSort === 'appearance-asc') {
-        // 출현순▲: 보너스 포함, 오름차순
-        sortedStats = Array.from(AppState.appearanceStatsMap.entries())
+        sortedStats = Array.from(appMap.entries())
             .map(([number, count]) => ({ number, count }))
-            .sort((a, b) => a.count - b.count);
+            .sort((a, b) => (a.count - b.count) || ((winMap.get(a.number) || 0) - (winMap.get(b.number) || 0)) || (b.number - a.number));
     } else if (AppState.currentSort === 'number-desc') {
-        // 번호순▼: 내림차순
         sortedStats.sort((a, b) => b.number - a.number);
     } else if (AppState.currentSort === 'number-asc') {
-        // 번호순▲: 오름차순
         sortedStats.sort((a, b) => a.number - b.number);
     } else if (AppState.currentSort === 'seq') {
         sortedStats.sort((a, b) => a.number - b.number);
     } else {
-        // 기본: 번호순 오름차순
         sortedStats.sort((a, b) => a.number - b.number);
     }
 
-    // 전체 섹션을 감싸는 박스 컨테이너 찾기 또는 생성
     let sectionBox = document.getElementById('numberGridSection');
     if (!sectionBox) {
         sectionBox = document.createElement('div');
         sectionBox.id = 'numberGridSection';
         sectionBox.className = 'stats-box';
-        sectionBox.style.marginBottom = '6px';
-        centerPanel.insertBefore(sectionBox, centerPanel.firstChild);
+        const row = document.getElementById('gridGameRow');
+        if (row) {
+            row.insertBefore(sectionBox, row.firstChild);
+        } else {
+            const inner = centerPanel.querySelector('.panel-inner') || centerPanel;
+            const optFilter = inner.querySelector('#optionFilterBox');
+            inner.insertBefore(sectionBox, optFilter ? optFilter.nextSibling : inner.firstChild);
+        }
     }
 
-    // 헤더 컨테이너 찾기 또는 생성
-    let headerContainer = document.getElementById('numberGridHeaderContainer');
-    if (!headerContainer) {
-        headerContainer = document.createElement('div');
-        headerContainer.id = 'numberGridHeaderContainer';
-        headerContainer.style.display = 'flex';
-        headerContainer.style.alignItems = 'center';
-        headerContainer.style.justifyContent = 'space-between';
-        headerContainer.style.marginBottom = '6px';
-        headerContainer.style.gap = '16px';
-        sectionBox.appendChild(headerContainer);
-    }
+    // 선택공 라벨 제거: 헤더 컨테이너 미사용 (기존에 있으면 제거)
+    const existingHeader = document.getElementById('numberGridHeaderContainer');
+    if (existingHeader) existingHeader.remove();
 
-    // 선택공 헤더 생성 (title 부분 생략 - 기존 로직 유지)
-    let title = headerContainer.querySelector('h2');
-    if (!title) {
-        title = document.createElement('h2');
-        title.textContent = '선택공';
-        title.style.textAlign = 'left';
-        title.style.margin = '0';
-        title.style.marginBottom = 'clamp(8px, 1.5vw, 12px)';
-        title.style.padding = '0';
-        title.style.fontSize = 'clamp(1.1rem, 2.5vw, 1.3rem)';
-        title.style.color = 'var(--color-primary)';
-        title.style.fontWeight = 'bold';
-        title.style.lineHeight = '1.2';
-        title.style.flex = '0 0 auto';
-        title.style.minHeight = 'auto';
-        headerContainer.appendChild(title);
-    } else {
-        title.style.margin = '0';
-        title.style.marginBottom = 'clamp(8px, 1.5vw, 12px)';
-        title.style.padding = '0';
-        title.style.fontSize = 'clamp(1.1rem, 2.5vw, 1.3rem)';
-        title.style.lineHeight = '1.2';
-        title.style.minHeight = 'auto';
-    }
-
-    // 필터 박스를 헤더 컨테이너로 이동
-    const filterBox = document.getElementById('filterBox');
-    if (filterBox && filterBox.parentElement !== headerContainer) {
-        filterBox.style.display = 'flex';
-        filterBox.style.flex = '0 0 auto';
-        filterBox.style.marginBottom = '0';
-        filterBox.style.width = '460px';
-        filterBox.style.minWidth = '460px';
-        filterBox.style.maxWidth = '460px';
-        filterBox.style.padding = '0 clamp(4px, 0.8vw, 6px)';
-        filterBox.style.marginLeft = 'auto';
-        filterBox.style.minHeight = '0';
-        headerContainer.appendChild(filterBox);
-    }
-
-    // 선택공 그리드 컨테이너 찾기 또는 생성
     let gridContainer = sectionBox.querySelector('.number-grid-container');
     if (!gridContainer) {
         gridContainer = document.createElement('div');
         gridContainer.className = 'number-grid-container';
-        gridContainer.style.width = '100%';
-        gridContainer.style.margin = '0 auto';
         sectionBox.appendChild(gridContainer);
     } else {
         gridContainer.innerHTML = '';
     }
-
-    // 9x5 그리드로 고정 (9열 5행)
-    gridContainer.style.display = 'grid';
-    gridContainer.style.gridTemplateColumns = 'repeat(9, 1fr)';
-    gridContainer.style.gap = 'clamp(3px, 0.8vw, 6px)';
-    gridContainer.style.placeItems = 'center';
-    gridContainer.style.justifyContent = 'center';
 
     // 당첨순 상위 6개 번호 찾기 (정렬된 순서 기준)
     const sortedByWin = [...sortedStats].sort((a, b) => b.count - a.count);
@@ -1364,13 +1392,13 @@ function renderNumberGrid() {
         // 해당 번호의 통계 정보 찾기
         const stat = sortedStats.find(s => s.number === number) || { number, count: 0 };
 
-        const ball = createStatBall(stat.number, 24, '0.9rem');
+        const ball = createStatBall(stat.number, 22, '0.8rem');
         ball.style.cursor = 'pointer';
         ball.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease';
 
         // 당첨순 상위 6개는 검정색 테두리 (0.2px)
         if (top6Numbers.has(stat.number)) {
-            ball.style.border = '0.2px solid #000000';
+            ball.style.border = '0.2px solid ' + SHAREHARMONY_PALETTE.black;
             ball.style.boxShadow = '0 0 0 1px rgba(0, 0, 0, 0.1)';
         }
 
@@ -1578,7 +1606,10 @@ function renderViewNumbersFromSelectedRounds(roundNumbers) {
     if (!viewNumbersList || !allData.length) return;
     const roundSet = new Set(roundNumbers);
     const roundData = allData.filter(r => roundSet.has(r.round));
-    const sorted = [...roundData].sort((a, b) => (b.round - a.round));
+    const sortOrder = (AppState.resultFilters && AppState.resultFilters.sortOrder) || 'desc';
+    const sorted = sortOrder === 'asc'
+        ? [...roundData].sort((a, b) => a.round - b.round)
+        : [...roundData].sort((a, b) => b.round - a.round);
     viewNumbersList.innerHTML = '';
     if (sorted.length === 0) {
         viewNumbersList.innerHTML = '<p>선택한 회차가 없습니다.</p>';
@@ -1625,8 +1656,8 @@ function renderStatsList() {
             statLine.style.justifyContent = 'space-between';
             statLine.style.gap = '8px';
             statLine.style.padding = '0 8px';
-            statLine.style.height = '28px';
-            statLine.style.minHeight = '28px';
+            statLine.style.height = '24px';
+            statLine.style.minHeight = '24px';
             statLine.style.boxSizing = 'border-box';
             statLine.style.cursor = 'pointer';
             statLine.title = '클릭 시 해당 회차를 우측 패널에 표시';
@@ -1638,7 +1669,7 @@ function renderStatsList() {
             leftPart.style.overflow = 'hidden';
             leftPart.style.gap = '4px';
             (entry.numbers || []).forEach(n => {
-                const ball = createStatBall(n, 20, '0.8rem');
+                const ball = createStatBall(n, 22, '0.8rem');
                 leftPart.appendChild(ball);
             });
             const rightPart = document.createElement('div');
@@ -1647,7 +1678,7 @@ function renderStatsList() {
             rightPart.style.gap = '4px';
             rightPart.style.flexShrink = '0';
             const pct = totalRounds > 0 ? ((entry.count / totalRounds) * 100).toFixed(1) : '0.0';
-            rightPart.innerHTML = '<span style="font-weight:700;">' + entry.count + '</span><span>회</span> <span style="color:#666;">(' + pct + '%)</span>';
+            rightPart.innerHTML = '<span style="font-weight:700;">' + entry.count + '</span><span>회</span> <span style="color:' + SHAREHARMONY_PALETTE.textSecondary + ';">(' + pct + '%)</span>';
             statLine.appendChild(leftPart);
             statLine.appendChild(rightPart);
             statLine.addEventListener('click', () => {
@@ -1664,36 +1695,31 @@ function renderStatsList() {
     let sortedStats = [...AppState.winStats];
     let percentageMap = AppState.winPercentageCache || new Map();
 
+    const slAppMap = AppState.appearanceStatsMap || new Map();
+    const slWinMap = AppState.winStatsMap || new Map();
     if (AppState.currentSort === 'win-desc') {
-        // 당첨순▼: 보너스 제외, 내림차순
-        sortedStats.sort((a, b) => b.count - a.count);
+        sortedStats.sort((a, b) => (b.count - a.count) || ((slAppMap.get(b.number) || 0) - (slAppMap.get(a.number) || 0)) || (a.number - b.number));
         percentageMap = AppState.winPercentageCache || new Map();
     } else if (AppState.currentSort === 'win-asc') {
-        // 당첨순▲: 보너스 제외, 오름차순
-        sortedStats.sort((a, b) => a.count - b.count);
+        sortedStats.sort((a, b) => (a.count - b.count) || ((slAppMap.get(a.number) || 0) - (slAppMap.get(b.number) || 0)) || (b.number - a.number));
         percentageMap = AppState.winPercentageCache || new Map();
     } else if (AppState.currentSort === 'appearance-desc') {
-        // 출현순▼: 보너스 포함, 내림차순
-        sortedStats = Array.from(AppState.appearanceStatsMap.entries())
+        sortedStats = Array.from(slAppMap.entries())
             .map(([number, count]) => ({ number, count }))
-            .sort((a, b) => b.count - a.count);
+            .sort((a, b) => (b.count - a.count) || ((slWinMap.get(b.number) || 0) - (slWinMap.get(a.number) || 0)) || (a.number - b.number));
         percentageMap = AppState.appearancePercentageCache || new Map();
     } else if (AppState.currentSort === 'appearance-asc') {
-        // 출현순▲: 보너스 포함, 오름차순
-        sortedStats = Array.from(AppState.appearanceStatsMap.entries())
+        sortedStats = Array.from(slAppMap.entries())
             .map(([number, count]) => ({ number, count }))
-            .sort((a, b) => a.count - b.count);
+            .sort((a, b) => (a.count - b.count) || ((slWinMap.get(a.number) || 0) - (slWinMap.get(b.number) || 0)) || (b.number - a.number));
         percentageMap = AppState.appearancePercentageCache || new Map();
     } else if (AppState.currentSort === 'number-desc') {
-        // 번호순▼: 내림차순
         sortedStats.sort((a, b) => b.number - a.number);
         percentageMap = AppState.winPercentageCache || new Map();
     } else if (AppState.currentSort === 'number-asc') {
-        // 번호순▲: 오름차순
         sortedStats.sort((a, b) => a.number - b.number);
         percentageMap = AppState.winPercentageCache || new Map();
     } else {
-        // 기본: 번호순▼
         sortedStats.sort((a, b) => b.number - a.number);
         percentageMap = AppState.winPercentageCache || new Map();
     }
@@ -1707,12 +1733,12 @@ function renderStatsList() {
         statLine.style.alignItems = 'center';
         statLine.style.gap = '8px';
         statLine.style.padding = '0 8px';
-        statLine.style.height = '28px';
-        statLine.style.minHeight = '28px';
+        statLine.style.height = '24px';
+        statLine.style.minHeight = '24px';
         statLine.style.boxSizing = 'border-box';
 
         // 공
-        const ball = createStatBall(stat.number, 24, '0.9rem');
+        const ball = createStatBall(stat.number, 22, '0.8rem');
 
         // 통계 정보 (우측 정렬)
         const statInfo = document.createElement('div');
@@ -1723,18 +1749,18 @@ function renderStatsList() {
         statInfo.style.fontSize = '0.9rem';
 
         const count = document.createElement('span');
-        count.style.color = '#000000';
+        count.style.color = SHAREHARMONY_PALETTE.textPrimary;
         count.textContent = `${stat.count}`;
 
         const countUnit = document.createElement('span');
-        countUnit.style.color = '#000000';
+        countUnit.style.color = SHAREHARMONY_PALETTE.textPrimary;
         countUnit.style.fontWeight = '700';
         countUnit.textContent = '회';
 
         const percentage = percentageMap.get(stat.number) || 0;
         const percent = document.createElement('span');
-        percent.style.color = '#666666';
-        percent.textContent = `(${percentage.toFixed(1)}%)`;
+        percent.style.color = SHAREHARMONY_PALETTE.textSecondary;
+        percent.textContent = `(${percentage.toFixed(2)}%)`;
 
         statInfo.appendChild(count);
         statInfo.appendChild(countUnit);
@@ -1753,43 +1779,62 @@ function initializeGameBox() {
     const gameSetsContainer = document.getElementById('gameSetsContainer');
     if (!gameSetsContainer) return;
 
-
-    // 1~5게임 생성
     for (let i = 1; i <= 5; i++) {
         const gameSet = document.createElement('div');
         gameSet.id = `gameSet${i}`;
-        gameSet.style.display = 'flex';
-        gameSet.style.alignItems = 'center';
-        gameSet.style.gap = '0';
-        gameSet.style.marginLeft = '12px';
-        gameSet.style.padding = '10px 0';
-        if (i < 5) {
-            gameSet.style.borderBottom = '1px solid #e0e0e0';
-        }
-        gameSet.style.minHeight = '32px';
-        gameSet.style.borderRadius = '0';
-        gameSet.style.backgroundColor = 'transparent';
+        gameSet.className = 'game-set-row';
 
-        // 게임 번호
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `gameCheckbox${i}`;
+        checkbox.dataset.gameIndex = i;
+        checkbox.disabled = true;
+        checkbox.style.width = '14px';
+        checkbox.style.height = '14px';
+        checkbox.addEventListener('change', function () {
+            const gameIndex = parseInt(this.dataset.gameIndex);
+            const modeBtn = document.getElementById(`modeBtn${gameIndex}`);
+            const currentMode = modeBtn ? modeBtn.dataset.mode : 'manual';
+
+            if (this.checked) {
+                let numbers = AppState.setSelectedBalls[gameIndex - 1] || [];
+                let validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
+
+                if (currentMode === 'manual' || currentMode === 'auto') {
+                    if (validNumbers.length !== 6) {
+                        alert('6개의 번호를 모두 선택해주세요.');
+                        this.checked = false;
+                        return;
+                    }
+                } else if (currentMode === 'semi-auto') {
+                    if (validNumbers.length >= 1 && validNumbers.length <= 5) {
+                        const fullNumbers = generateNumbersWithFilters(validNumbers, true);
+                        const newNumbers = fullNumbers.filter(n => !validNumbers.includes(n));
+                        const allNumbers = [...validNumbers, ...newNumbers].slice(0, 6).sort((a, b) => a - b);
+                        AppState.setSelectedBalls[gameIndex - 1] = allNumbers;
+                        updateGameSet(gameIndex, 'semi-auto');
+                    } else if (validNumbers.length === 6) {
+                        // 6개 완료 — 그대로 유지
+                    } else if (validNumbers.length === 0) {
+                        alert('반자동 모드는 1개 이상의 번호를 선택해야 합니다.');
+                        this.checked = false;
+                        return;
+                    }
+                }
+            }
+            updateSaveBoxState();
+        });
+
         const gameNumber = document.createElement('span');
-        gameNumber.textContent = `${i}게임`;
-        gameNumber.style.fontSize = '0.85rem';
-        gameNumber.style.fontWeight = '600';
-        gameNumber.style.width = '46px';
-        gameNumber.style.flexShrink = '0';
-        gameNumber.style.color = '#000000';
+        gameNumber.className = 'game-label';
+        gameNumber.textContent = `G${i}`;
 
-        // 자동/반자동/수동 토글 버튼 (너비 고정)
         const modeBtn = document.createElement('button');
         modeBtn.id = `modeBtn${i}`;
-        modeBtn.className = 'filter-btn';
+        modeBtn.className = 'filter-btn game-mode-btn';
         modeBtn.textContent = '수동';
-        modeBtn.style.width = '54px';
-        modeBtn.style.flexShrink = '0';
-        modeBtn.style.marginRight = '4px';
         modeBtn.dataset.gameIndex = i;
         modeBtn.dataset.mode = 'manual';
-
         modeBtn.addEventListener('click', function () {
             const currentMode = this.dataset.mode;
             let newMode, newText;
@@ -1819,109 +1864,34 @@ function initializeGameBox() {
             updateGameSet(i, newMode, true);
         });
 
-        // 게임공 컨테이너 (남은 공간을 채움, 오른쪽 정렬)
         const ballsContainer = document.createElement('div');
         ballsContainer.id = `gameBalls${i}`;
-        ballsContainer.style.display = 'flex';
-        ballsContainer.style.gap = '6px';
-        ballsContainer.style.flex = '1';
-        ballsContainer.style.minWidth = '0';
-        ballsContainer.style.flexWrap = 'nowrap';
-        ballsContainer.style.minHeight = '24px';
-        ballsContainer.style.overflowX = 'hidden';
-        ballsContainer.style.overflowY = 'hidden';
-        ballsContainer.style.marginLeft = 'auto'; // 공+체크박스를 오른쪽으로
-        ballsContainer.style.justifyContent = 'flex-end'; // 공을 오른쪽 정렬
+        ballsContainer.className = 'game-balls-wrap';
 
-        // 체크박스 (6개 공 선택 시에만 활성화)
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `gameCheckbox${i}`;
-        checkbox.dataset.gameIndex = i;
-        checkbox.disabled = true;
-        checkbox.style.flexShrink = '0';
-        checkbox.style.width = '16px';
-        checkbox.style.height = '16px';
-        checkbox.style.marginLeft = '16px';
-        checkbox.style.marginRight = '12px';
-        checkbox.addEventListener('change', function () {
-            const gameIndex = parseInt(this.dataset.gameIndex);
-            const modeBtn = document.getElementById(`modeBtn${gameIndex}`);
-            const currentMode = modeBtn ? modeBtn.dataset.mode : 'manual';
-
-            if (this.checked) {
-                let numbers = AppState.setSelectedBalls[gameIndex - 1] || [];
-                let validNumbers = numbers.filter(n => n && n >= 1 && n <= 45);
-
-                if (currentMode === 'manual' || currentMode === 'auto') {
-                    if (validNumbers.length !== 6) {
-                        alert('6개의 번호를 모두 선택해주세요.');
-                        this.checked = false;
-                        return;
-                    }
-                } else if (currentMode === 'semi-auto') {
-                    // 반자동은 게임공이 1개 이상 5개 이하일 경우 체크 시 나머지 자동 생성
-                    if (validNumbers.length >= 1 && validNumbers.length <= 5) {
-                        const fullNumbers = generateNumbersWithFilters(validNumbers, true);
-                        const newNumbers = fullNumbers.filter(n => !validNumbers.includes(n));
-                        const allNumbers = [...validNumbers, ...newNumbers].slice(0, 6).sort((a, b) => a - b);
-                        AppState.setSelectedBalls[gameIndex - 1] = allNumbers;
-                        updateGameSet(gameIndex, 'semi-auto');
-                    } else if (validNumbers.length === 6) {
-                        // 이미 6개면 그냥 체크만 됨
-                    } else if (validNumbers.length === 0) {
-                        alert('반자동 모드는 1개 이상의 번호를 선택해야 합니다.');
-                        this.checked = false;
-                        return;
-                    }
-                }
-            } else {
-                // 해제 시 어떠한 상태 초기화나 버튼 비활성화도 하지 않고 그대로 유지
-            }
-
-            updateSaveBoxState();
-        });
-
-        // 합계 표시 영역 (고정 너비)
         const sumDisplay = document.createElement('span');
         sumDisplay.id = `gameSum${i}`;
-        sumDisplay.textContent = ' [ 0 ]';
-        sumDisplay.style.fontSize = '0.85rem';
-        sumDisplay.style.color = '#ff0000';
-        sumDisplay.style.fontWeight = 'bold';
-        sumDisplay.style.textAlign = 'right';
-        sumDisplay.style.flexShrink = '0';
-        sumDisplay.style.width = '58px';
-        sumDisplay.style.marginRight = '4px';
+        sumDisplay.className = 'game-sum';
+        sumDisplay.textContent = '0';
 
-        // AI 확률 표시 영역 (고정 너비, display:none 대신 visibility:hidden)
         const probDisplay = document.createElement('div');
         probDisplay.id = `gameProb${i}`;
-        probDisplay.style.fontSize = '0.7rem';
-        probDisplay.style.color = '#fff';
-        probDisplay.style.backgroundColor = '#999';
-        probDisplay.style.padding = '2px 5px';
-        probDisplay.style.borderRadius = '10px';
-        probDisplay.style.marginRight = '8px';
-        probDisplay.style.fontWeight = 'bold';
-        probDisplay.style.width = '42px';
-        probDisplay.style.flexShrink = '0';
-        probDisplay.style.textAlign = 'center';
-        probDisplay.style.boxSizing = 'border-box';
+        probDisplay.className = 'game-prob';
         probDisplay.textContent = '0%';
-        probDisplay.style.visibility = 'hidden'; // 공간 유지하며 숨김
 
+        const rightGroup = document.createElement('div');
+        rightGroup.className = 'game-right-group';
+        rightGroup.appendChild(sumDisplay);
+
+        gameSet.appendChild(checkbox);
         gameSet.appendChild(gameNumber);
         gameSet.appendChild(modeBtn);
-        gameSet.appendChild(sumDisplay);
-        gameSet.appendChild(probDisplay); // 합계 옆에 확률 추가
+        gameSet.appendChild(probDisplay);
         gameSet.appendChild(ballsContainer);
-        gameSet.appendChild(checkbox);
+        gameSet.appendChild(rightGroup);
 
         gameSetsContainer.appendChild(gameSet);
     }
 
-    // 초기 게임 생성
     generateAllGames();
 }
 
@@ -2050,24 +2020,91 @@ function updateSortButtons(activeType) {
  * 필터 리스너 설정
  */
 function setupFilterListeners() {
-    const oddEvenFilter = document.getElementById('oddEvenFilter');
-    const sequenceFilter = document.getElementById('sequenceFilter');
-    const hotColdFilter = document.getElementById('hotColdFilter');
+    if (!AppState.optionFilters) {
+        AppState.optionFilters = { oddEven: 'none', hotCold: 'none', consecutive: 'none', avgLow: null, avgHigh: null };
+    }
 
-    if (oddEvenFilter) {
-        oddEvenFilter.addEventListener('change', () => {
+    const ids = [
+        { el: 'filterOddEven', key: 'oddEven' },
+        { el: 'filterHotCold', key: 'hotCold' },
+        { el: 'filterConsecutive', key: 'consecutive' }
+    ];
+    ids.forEach(function (item) {
+        const el = document.getElementById(item.el);
+        if (el) {
+            el.addEventListener('change', function () {
+                AppState.optionFilters[item.key] = this.value;
+                generateAllGames();
+            });
+        }
+    });
+
+    var avgLow = document.getElementById('filterAvgLow');
+    var avgHigh = document.getElementById('filterAvgHigh');
+    if (avgLow) {
+        avgLow.addEventListener('change', function () {
+            var v = parseFloat(this.value);
+            AppState.optionFilters.avgLow = isNaN(v) ? null : v;
             generateAllGames();
         });
     }
-
-    if (sequenceFilter) {
-        sequenceFilter.addEventListener('change', () => {
+    if (avgHigh) {
+        avgHigh.addEventListener('change', function () {
+            var v = parseFloat(this.value);
+            AppState.optionFilters.avgHigh = isNaN(v) ? null : v;
             generateAllGames();
         });
     }
+    const excludeEl = document.getElementById('filterExclude');
+    const clearExcludeBtn = document.getElementById('clearExcludeBtn');
 
-    if (hotColdFilter) {
-        hotColdFilter.addEventListener('change', () => {
+    if (excludeEl) {
+        const updateClearBtnState = () => {
+            if (clearExcludeBtn) {
+                clearExcludeBtn.style.display = excludeEl.value.trim().length > 0 ? 'block' : 'none';
+            }
+        };
+        
+        // 초기 상태 설정
+        updateClearBtnState();
+        
+        if (clearExcludeBtn) {
+            clearExcludeBtn.addEventListener('click', function() {
+                excludeEl.value = '';
+                updateClearBtnState();
+                generateAllGames();
+                excludeEl.focus();
+            });
+        }
+
+        // 1. 실시간 입력 제어: 숫자, 콤마, 공백만 허용 (그 외 자동 삭제)
+        excludeEl.addEventListener('input', function() {
+            const raw = this.value;
+            const clean = raw.replace(/[^0-9,\s]/g, '');
+            if (raw !== clean) {
+                this.value = clean;
+            }
+            updateClearBtnState();
+        });
+
+        // 2. 입력 완료 시 논리 검증: 1~45 범위 및 포맷팅
+        excludeEl.addEventListener('change', function() {
+            const parts = this.value.split(',');
+            const validSet = new Set();
+            let hasRangeError = false;
+
+            parts.forEach(p => {
+                const n = parseInt(p.trim(), 10);
+                if (!isNaN(n)) {
+                    if (n >= 1 && n <= 45) validSet.add(n);
+                    else hasRangeError = true;
+                }
+            });
+
+            if (hasRangeError) alert('제외수는 1~45 사이의 숫자여야 합니다.\n범위를 벗어난 숫자는 제외되었습니다.');
+            
+            this.value = Array.from(validSet).sort((a, b) => a - b).join(', ');
+            updateClearBtnState();
             generateAllGames();
         });
     }
@@ -2141,7 +2178,7 @@ function handleManualBallClick(gameIndex, ballIndex) {
     // 선택 중인 게임공 하이라이트
     const selectingBall = document.querySelector(`#gameBalls${gameIndex} > div:nth-child(${ballIndex + 1})`);
     if (selectingBall) {
-        selectingBall.style.border = '2px solid #0066ff';
+        selectingBall.style.border = '2px solid ' + SHAREHARMONY_PALETTE.selectionBorder;
         selectingBall.style.boxShadow = '0 0 8px rgba(0, 102, 255, 0.5)';
     }
 }
@@ -2180,7 +2217,7 @@ function handleSelectBallClick(number) {
         const selectingBallElement = document.querySelector(`#gameBalls${currentSelectingGameIndex} > div[data-ball-index="${currentSelectingBallIndex}"]`);
         if (selectingBallElement) {
             // 선택공으로 교체
-            const newBall = createStatBall(number, 24, '0.9rem');
+            const newBall = createStatBall(number, 22, '0.8rem');
             newBall.style.cursor = 'pointer';
             newBall.dataset.gameIndex = currentSelectingGameIndex;
             newBall.dataset.ballIndex = currentSelectingBallIndex;
@@ -2195,32 +2232,30 @@ function handleSelectBallClick(number) {
                 allGameBalls.forEach(b => {
                     if (b.dataset.isSelected === 'true') {
                         const bNum = parseInt(b.textContent);
-                        const bClass = getBallClass(bNum);
+                        const bClass = getBallColorClass(bNum);
                         const bgColors = {
-                            'ball-yellow': '#FBC400',
-                            'ball-blue': '#69C8F2',
-                            'ball-red': '#FF7272',
-                            'ball-gray': '#AAAAAA',
-                            'ball-green': '#B0D840'
+                            'color-yellow': '#FBC400',
+                            'color-blue': '#69C8F2',
+                            'color-red': '#FF7272',
+                            'color-gray': '#AAAAAA',
+                            'color-green': '#B0D840'
                         };
                         b.style.backgroundColor = bgColors[bClass] || '#808080';
-                        b.style.color = '#ffffff';
+                        b.style.color = '#333';
                         b.style.border = 'none';
                     } else {
-                        // 빈 공 또는 수동 모드 공의 하이라이트 제거
                         b.style.border = '';
                         b.style.boxShadow = '';
                     }
                 });
 
-                // 반자동 모드: 게임공 클릭 시 배경색을 보색으로 변경
-                const ballClass = getBallClass(number);
+                const ballClass = getBallColorClass(number);
                 const bgColors = {
-                    'ball-yellow': '#FBC400',
-                    'ball-blue': '#69C8F2',
-                    'ball-red': '#FF7272',
-                    'ball-gray': '#AAAAAA',
-                    'ball-green': '#B0D840'
+                    'color-yellow': '#FBC400',
+                    'color-blue': '#69C8F2',
+                    'color-red': '#FF7272',
+                    'color-gray': '#AAAAAA',
+                    'color-green': '#B0D840'
                 };
                 const bgColor = bgColors[ballClass] || '#808080';
                 const compHex = getComplementaryColor(bgColor);
@@ -2295,7 +2330,7 @@ function handleSelectBallClick(number) {
                 // 선택 중인 게임공 하이라이트 (방금 업데이트 된 DOM)
                 const selectingBall = document.querySelector(`#gameBalls${currentSelectingGameIndex} > div:nth-child(${nextEmptyIndex + 1})`);
                 if (selectingBall) {
-                    selectingBall.style.border = '2px solid #0066ff';
+                    selectingBall.style.border = '2px solid ' + SHAREHARMONY_PALETTE.selectionBorder;
                     selectingBall.style.boxShadow = '0 0 8px rgba(0, 102, 255, 0.5)';
                 }
 
@@ -2330,6 +2365,19 @@ function generateAllGames() {
     }
 }
 
+function getOtherGameCombos(currentGameIndex) {
+    var combos = new Set();
+    if (!AppState.setSelectedBalls) return combos;
+    for (var g = 0; g < 5; g++) {
+        if (g === currentGameIndex - 1) continue;
+        var nums = AppState.setSelectedBalls[g];
+        if (nums && nums.length === 6) {
+            combos.add([...nums].sort(function (a, b) { return a - b; }).join(','));
+        }
+    }
+    return combos;
+}
+
 /**
  * 개별 게임공 생성
  */
@@ -2343,13 +2391,25 @@ function generateGame(gameIndex, mode, isModeChange = false) {
         const checkbox = document.getElementById(`gameCheckbox${gameIndex}`);
         let numbers;
         if (isModeChange) {
-            numbers = generateNumbersWithFilters();
+            const otherCombos = getOtherGameCombos(gameIndex);
+            numbers = null;
+            for (let t = 0; t < 100; t++) {
+                const candidate = generateNumbersWithFilters([], false, otherCombos);
+                if (calculateAIProbability(candidate) >= 100) { numbers = candidate; break; }
+            }
+            if (!numbers) numbers = generateNumbersWithFilters([], false, otherCombos);
             if (!AppState.setSelectedBalls) AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
             AppState.setSelectedBalls[gameIndex - 1] = numbers;
         } else {
             numbers = (AppState.setSelectedBalls && AppState.setSelectedBalls[gameIndex - 1]) || [];
             if (numbers.length !== 6) {
-                numbers = generateNumbersWithFilters();
+                const otherCombos = getOtherGameCombos(gameIndex);
+                numbers = null;
+                for (let t = 0; t < 100; t++) {
+                    const candidate = generateNumbersWithFilters([], false, otherCombos);
+                    if (calculateAIProbability(candidate) >= 100) { numbers = candidate; break; }
+                }
+                if (!numbers) numbers = generateNumbersWithFilters([], false, otherCombos);
                 if (!AppState.setSelectedBalls) AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
                 AppState.setSelectedBalls[gameIndex - 1] = numbers;
             }
@@ -2357,7 +2417,7 @@ function generateGame(gameIndex, mode, isModeChange = false) {
 
         // 게임공 표시
         numbers.forEach(num => {
-            const ball = createStatBall(num, 24, '0.9rem');
+            const ball = createStatBall(num, 22, '0.8rem');
             ballsContainer.appendChild(ball);
         });
 
@@ -2391,7 +2451,7 @@ function generateGame(gameIndex, mode, isModeChange = false) {
         for (let i = 0; i < 6; i++) {
             if (numbers[i]) {
                 const num = numbers[i];
-                const ballElement = createStatBall(num, 24, '0.9rem');
+                const ballElement = createStatBall(num, 22, '0.8rem');
                 ballElement.style.cursor = 'pointer';
                 ballElement.dataset.gameIndex = gameIndex;
                 ballElement.dataset.ballIndex = i;
@@ -2406,32 +2466,30 @@ function generateGame(gameIndex, mode, isModeChange = false) {
                     allGameBalls.forEach(b => {
                         if (b.dataset.isSelected === 'true') {
                             const bNum = parseInt(b.textContent);
-                            const bClass = getBallClass(bNum);
+                            const bClass = getBallColorClass(bNum);
                             const bgColors = {
-                                'ball-yellow': '#FBC400',
-                                'ball-blue': '#69C8F2',
-                                'ball-red': '#FF7272',
-                                'ball-gray': '#AAAAAA',
-                                'ball-green': '#B0D840'
+                                'color-yellow': '#FBC400',
+                                'color-blue': '#69C8F2',
+                                'color-red': '#FF7272',
+                                'color-gray': '#AAAAAA',
+                                'color-green': '#B0D840'
                             };
                             b.style.backgroundColor = bgColors[bClass] || '#808080';
-                            b.style.color = '#ffffff';
+                            b.style.color = '#333';
                             b.style.border = 'none';
                         } else {
-                            // 빈 공 또는 수동 모드 공의 하이라이트 제거
                             b.style.border = '';
                             b.style.boxShadow = '';
                         }
                     });
 
-                    // 반자동 모드: 게임공 클릭 시 배경색을 보색으로 변경
-                    const ballClass = getBallClass(num);
+                    const ballClass = getBallColorClass(num);
                     const bgColors = {
-                        'ball-yellow': '#FBC400',
-                        'ball-blue': '#69C8F2',
-                        'ball-red': '#FF7272',
-                        'ball-gray': '#AAAAAA',
-                        'ball-green': '#B0D840'
+                        'color-yellow': '#FBC400',
+                        'color-blue': '#69C8F2',
+                        'color-red': '#FF7272',
+                        'color-gray': '#AAAAAA',
+                        'color-green': '#B0D840'
                     };
                     const bgColor = bgColors[ballClass] || '#808080';
                     const compHex = getComplementaryColor(bgColor);
@@ -2447,19 +2505,11 @@ function generateGame(gameIndex, mode, isModeChange = false) {
                 ballsContainer.appendChild(ballElement);
             } else {
                 const ball = document.createElement('div');
-                ball.className = 'stat-ball';
-                ball.style.width = '24px';
-                ball.style.height = '24px';
-                ball.style.borderRadius = '50%';
-                ball.style.backgroundColor = '#e0e0e0';
-                ball.style.color = '#666666';
-                ball.style.display = 'flex';
-                ball.style.alignItems = 'center';
-                ball.style.justifyContent = 'center';
-                ball.style.fontSize = '0.9rem';
-                ball.style.fontWeight = '700';
+                ball.className = 'stat-ball stat-ball--sm';
+                ball.style.backgroundColor = SHAREHARMONY_PALETTE.border;
+                ball.style.color = SHAREHARMONY_PALETTE.textSecondary;
                 ball.style.cursor = 'pointer';
-                ball.style.border = '0.2px solid #808080';
+                ball.style.border = '0.2px solid ' + SHAREHARMONY_PALETTE.border;
                 ball.textContent = '?';
                 ball.dataset.gameIndex = gameIndex;
                 ball.dataset.ballIndex = i;
@@ -2484,26 +2534,18 @@ function generateGame(gameIndex, mode, isModeChange = false) {
 
             if (currentNumbers[i]) {
                 // 선택된 번호가 있으면 색상 공 생성
-                ball = createStatBall(currentNumbers[i], 24, '0.9rem');
+                ball = createStatBall(currentNumbers[i], 22, '0.8rem');
                 ball.style.cursor = 'pointer';
                 ball.dataset.gameIndex = gameIndex;
                 ball.dataset.ballIndex = i;
             } else {
                 // 선택되지 않았으면 기존 흑백 원형 버튼 생성
                 ball = document.createElement('div');
-                ball.className = 'stat-ball';
-                ball.style.width = '24px';
-                ball.style.height = '24px';
-                ball.style.borderRadius = '50%';
-                ball.style.backgroundColor = '#000000';
-                ball.style.color = '#ffffff';
-                ball.style.display = 'flex';
-                ball.style.alignItems = 'center';
-                ball.style.justifyContent = 'center';
-                ball.style.fontSize = '0.9rem';
-                ball.style.fontWeight = '700';
+                ball.className = 'stat-ball stat-ball--sm';
+                ball.style.backgroundColor = SHAREHARMONY_PALETTE.black;
+                ball.style.color = SHAREHARMONY_PALETTE.white;
                 ball.style.cursor = 'pointer';
-                ball.style.border = '0.2px solid #000000';
+                ball.style.border = '0.2px solid ' + SHAREHARMONY_PALETTE.black;
                 ball.textContent = '?';
 
                 ball.dataset.gameIndex = gameIndex;
@@ -2518,12 +2560,12 @@ function generateGame(gameIndex, mode, isModeChange = false) {
                 // 이전 선택 하이라이트 제거
                 const allBalls = ballsContainer.querySelectorAll('.stat-ball');
                 allBalls.forEach(b => {
-                    b.style.border = '0.2px solid #000000';
+                    b.style.border = '0.2px solid ' + SHAREHARMONY_PALETTE.black;
                     b.style.boxShadow = 'none';
                 });
 
                 // 현재 선택공 하이라이트
-                ball.style.border = '2px solid #0066ff';
+                ball.style.border = '2px solid ' + SHAREHARMONY_PALETTE.selectionBorder;
                 ball.style.boxShadow = '0 0 8px rgba(0, 102, 255, 0.5)';
 
                 currentSelectingGameIndex = gameIndex;
@@ -2579,16 +2621,16 @@ function updateGameProbability(gameIndex, numbers) {
     const score = calculateAIProbability(numbers);
     probDisplay.textContent = `${score}%`;
 
-    // 점수에 따른 색상 변경
+    // 점수에 따른 색상 변경 (동행볼 색은 70~89 구간만 유지)
     if (score >= 90) {
-        probDisplay.style.backgroundColor = '#FFD700'; // 금색
-        probDisplay.style.color = '#000';
+        probDisplay.style.backgroundColor = SHAREHARMONY_PALETTE.golden;
+        probDisplay.style.color = SHAREHARMONY_PALETTE.black;
     } else if (score >= 70) {
-        probDisplay.style.backgroundColor = '#69C8F2'; // 하늘색
-        probDisplay.style.color = '#fff';
+        probDisplay.style.backgroundColor = '#546E7A'; // 공통색 Action
+        probDisplay.style.color = SHAREHARMONY_PALETTE.white;
     } else {
-        probDisplay.style.backgroundColor = '#999';
-        probDisplay.style.color = '#fff';
+        probDisplay.style.backgroundColor = SHAREHARMONY_PALETTE.textMuted;
+        probDisplay.style.color = SHAREHARMONY_PALETTE.white;
     }
 
     // 클릭 시 상세 분석 말풍선 표시
@@ -2612,60 +2654,90 @@ function showAnalysisBubble(gameIndex, numbers, score, event) {
     // 말풍선 위치 조정 (이미지 추가로 높이 확보)
     const rect = event.currentTarget.getBoundingClientRect();
     bubble.style.left = (window.scrollX + rect.left - 150) + 'px';
-    bubble.style.top = (window.scrollY + rect.top - 460) + 'px'; // 높이 확장
-    bubble.style.width = '320px'; // 너비 약간 확장
+    bubble.style.top = (window.scrollY + rect.top - 320) + 'px';
+    bubble.style.width = 'clamp(260px, 70vw, 320px)';
 
-    const sum = numbers.reduce((a, b) => a + b, 0);
-    const odd = numbers.filter(n => n % 2 !== 0).length;
-    const ac = calculateAC(numbers);
+    const sorted = [...numbers].sort((a, b) => a - b);
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    const odd = sorted.filter(n => n % 2 !== 0).length;
+    const ac = calculateAC(sorted);
+    let seqPairs = 0;
+    for (let i = 0; i < sorted.length - 1; i++) { if (sorted[i + 1] === sorted[i] + 1) seqPairs++; }
+    let hotCnt = 0;
+    if (AppState && AppState.allLotto645Data) {
+        const freq = {};
+        AppState.allLotto645Data.slice(0, 20).forEach(r => r.numbers.forEach(n => { freq[n] = (freq[n] || 0) + 1; }));
+        const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+        const hotSet = new Set(entries.slice(0, 23).map(e => parseInt(e[0])));
+        hotCnt = sorted.filter(n => hotSet.has(n)).length;
+    }
     const nextRound = (AppState && AppState.allLotto645Data) ? AppState.allLotto645Data[0].round + 1 : '??';
 
-    let analysisText = `✨ 추천번호: ${numbers.sort((a, b) => a - b).join(', ')}\n`;
-    analysisText += `📍 합계 분석: ${sum} (최빈 당첨 구간 진입 완료)\n`;
-    analysisText += `⚖️ 홀짝 균형: ${odd}:${6 - odd} (황금 비율 매칭)\n`;
-    analysisText += `📐 수학적 안정성(AC): ${ac} (무작위성 검증 필)\n`;
-    analysisText += `🏆 AI 분석 신뢰도: ${score}% (프리미엄 등급)`;
+    let analysisText = `✨ 추천번호: ${sorted.join(', ')}\n`;
+    analysisText += `합계 ${sum} | 홀짝 ${odd}:${6 - odd} | 핫콜 ${hotCnt}:${6 - hotCnt} | 연속 ${seqPairs} | AC ${ac}\n`;
+    analysisText += `🏆 AI 분석 신뢰도: ${score}%`;
 
     // 게임 모드 확인
     const modeBtn = document.getElementById(`modeBtn${gameIndex}`);
     const isAiMode = modeBtn && modeBtn.dataset.mode === 'auto';
 
     let ticketImageHtml = '';
+    // 티켓 이미지 또는 번호 리스트 HTML 생성
     if (isAiMode && score >= 90) { // AI추천이면서 90점 이상일 때만 티켓 렌더링
         drawPremiumTicket(numbers);
         const canvas = document.getElementById('premiumTicketCanvas');
         if (canvas) {
             const ticketImgData = canvas.toDataURL('image/png');
             ticketImageHtml = `
-            <!-- 행운 티켓 이미지 추가 (동적 생성) -->
-            <div style="margin: 10px 0; text-align: center;">
-                <img src="${ticketImgData}" style="width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid #FFD700;" alt="Lucky Ticket">
-            </div>
-            `;
+                <div style="margin: 0 0 10px 0; text-align: center; overflow:hidden; border-radius:8px;">
+                    <img src="${ticketImgData}" style="width: 100%; display:block; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" alt="Lucky Ticket">
+                </div>`;
         }
     } else {
         ticketImageHtml = `
-            <div style="margin:12px 0; background:#f9f9f9; padding:8px; border-radius:6px; text-align:center; border: 1px solid #eee;">
-                ${numbers.sort((a, b) => a - b).map(n => `<span class="stat-ball ${getBallClass(n)}" style="display:inline-flex; width:22px; height:22px; font-size:0.8rem; margin:0 3px;">${n}</span>`).join('')}
+            <div style="margin:0 0 10px 0; background:#f5f7f9; padding:12px 8px; border-radius:8px; text-align:center; border: 1px solid #eef2f5;">
+                ${numbers.sort((a, b) => a - b).map(n => `<span class="stat-ball stat-ball--sm ${getBallColorClass(n)}" style="display:inline-flex; margin:0 3px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">${n}</span>`).join('')}
             </div>
         `;
     }
 
+    // 팝업 내부 HTML 구성 (모던 카드 스타일)
     bubble.innerHTML = `
-        <span class="bubble-close" onclick="this.parentElement.remove()">×</span>
-        <div style="font-weight:bold; color:#b8860b; margin-bottom:12px; border-bottom:2px solid #FFD700; padding-bottom:8px; font-size:1rem; text-align:center;">
-             ${isAiMode ? '✨ AI 추천 번호 분석' : '📊 번호 상세 분석'}
+        <div class="ab-header">
+            <div class="ab-title">
+                ${isAiMode ? '<span style="font-size:1.1rem">✨</span> AI 정밀 분석' : '<span style="font-size:1.1rem">📊</span> 번호 상세 분석'}
+            </div>
+            <span class="ab-close" onclick="this.closest('.analysis-bubble').remove()">×</span>
         </div>
-        <div style="font-size:0.85rem; line-height:1.8; color: #333;">
-            <p style="margin:6px 0;"><b>📍 합계 분석:</b> ${sum} (최빈 당첨 구간 진입 완료)</p>
-            <p style="margin:6px 0;"><b>⚖️ 홀짝 균형:</b> ${odd}:${6 - odd} (황금 비율 매칭)</p>
-            <p style="margin:6px 0;"><b>📐 수학적 안정성(AC):</b> ${ac} (무작위성 검증 필)</p>
-            <p style="margin:6px 0;"><b>🏆 AI 분석 신뢰도:</b> <span style="color:#d4af37; font-weight:bold;">${score}%</span></p>
+        
+        <div class="ab-content">
             ${ticketImageHtml}
+            
+            <div class="ab-score-area">
+                <span class="ab-score-label">AI 분석 신뢰도</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <div style="width:80px; height:6px; background:#e0e0e0; border-radius:3px; overflow:hidden;">
+                        <div style="width:${score}%; height:100%; background:${score >= 90 ? '#EBC658' : '#1565C0'}; border-radius:3px;"></div>
+                    </div>
+                    <span class="ab-score-val" style="color:${score >= 90 ? '#D4961A' : '#1565C0'}">${score}%</span>
+                </div>
+            </div>
+
+            <div class="ab-grid">
+                <div class="ab-stat-item"><span class="ab-stat-label">합계</span> <span class="ab-stat-val">${sum}</span></div>
+                <div class="ab-stat-item"><span class="ab-stat-label">홀:짝</span> <span class="ab-stat-val">${odd}:${6 - odd}</span></div>
+                <div class="ab-stat-item"><span class="ab-stat-label">핫:콜</span> <span class="ab-stat-val">${hotCnt}:${6 - hotCnt}</span></div>
+                <div class="ab-stat-item"><span class="ab-stat-label">연속쌍</span> <span class="ab-stat-val">${seqPairs}</span></div>
+                <div class="ab-stat-item"><span class="ab-stat-label">복잡도(AC)</span> <span class="ab-stat-val">${ac}</span></div>
+                <div class="ab-stat-item"><span class="ab-stat-label">구간진입</span> <span class="ab-stat-val" style="color:#1565C0">적정</span></div>
+            </div>
         </div>
-        <button id="copyBubbleBtn" style="width:100%; margin-top:10px; padding:10px; background:linear-gradient(135deg, #34a853, #2d8a46); color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-            카톡/문자 복사하여 공유하기 📤
-        </button>
+
+        <div class="ab-footer">
+            <button id="copyBubbleBtn" class="ab-btn">
+                <span>결과 공유하기</span> 📤
+            </button>
+        </div>
     `;
 
     document.body.appendChild(bubble);
@@ -2695,27 +2767,61 @@ function calculateAIProbability(numbers) {
     let score = 0;
     const sorted = [...numbers].sort((a, b) => a - b);
 
-    // 1. 합계 범위 (121~160 사이일 때 가점)
+    const sumRange = getSumRange();
+    const oeFilter = document.getElementById('filterOddEven')?.value || 'none';
+    const hcFilter = document.getElementById('filterHotCold')?.value || 'none';
+    const seqFilter = document.getElementById('filterConsecutive')?.value || 'none';
+    const acFilter = document.getElementById('filterAC')?.value || 'none';
+
+    // 1. 합계: min~max 범위 내 만점, ±20 이내 절반
     const sum = numbers.reduce((a, b) => a + b, 0);
-    if (sum >= 121 && sum <= 160) score += 40;
-    else if (sum >= 100 && sum <= 180) score += 20;
+    if (sum >= sumRange.start && sum <= sumRange.end) score += 25;
+    else if (sum >= sumRange.start - 20 && sum <= sumRange.end + 20) score += 12;
 
-    // 2. 홀짝 비율 (3:3 또는 2:4일 때 가점)
+    // 2. 홀짝: 필터 설정 시 일치 만점, 미설정 시 만점
     const oddCount = numbers.filter(n => n % 2 !== 0).length;
-    if (oddCount === 3) score += 30;
-    else if (oddCount === 2 || oddCount === 4) score += 15;
+    if (oeFilter !== 'none') {
+        const targetOdd = parseInt(oeFilter.split('-')[0], 10);
+        if (oddCount === targetOdd) score += 20;
+        else if (Math.abs(oddCount - targetOdd) === 1) score += 10;
+    } else {
+        score += 20;
+    }
 
-    // 3. 연속 번호 존재 여부 (연속 번호가 0개일 때 가점)
+    // 3. 핫콜: 필터 설정 시 일치 만점, 미설정 시 만점
+    if (hcFilter !== 'none' && AppState && AppState.allLotto645Data) {
+        const { hot } = getOverallHotColdNumbers();
+        const hotSet = new Set(hot);
+        const hotCnt = sorted.filter(n => hotSet.has(n)).length;
+        const targetHot = parseInt(hcFilter.split('-')[0], 10);
+        if (hotCnt === targetHot) score += 20;
+        else if (Math.abs(hotCnt - targetHot) === 1) score += 10;
+    } else {
+        score += 20;
+    }
+
+    // 4. 연속: 필터 설정 시 일치 만점, 미설정 시 만점
     let seqCount = 0;
     for (let i = 0; i < sorted.length - 1; i++) {
         if (sorted[i + 1] === sorted[i] + 1) seqCount++;
     }
-    if (seqCount === 0) score += 20;
-    else if (seqCount === 1) score += 10;
+    if (seqFilter !== 'none') {
+        const targetSeq = parseInt(seqFilter, 10);
+        const match = (targetSeq === 3) ? (seqCount >= 3) : (seqCount === targetSeq);
+        if (match) score += 15;
+    } else {
+        score += 15;
+    }
 
-    // 4. 구간 분포 (다양한 구간에 퍼져있을 때 가점)
-    const zones = new Set(numbers.map(n => Math.floor((n - 1) / 10)));
-    if (zones.size >= 4) score += 10;
+    // 5. AC: 필터 설정 시 일치 만점, 미설정 시 만점
+    const ac = calculateAC(sorted);
+    if (acFilter !== 'none') {
+        const targetAC = parseInt(acFilter, 10);
+        if (ac === targetAC) score += 20;
+        else if (Math.abs(ac - targetAC) === 1) score += 10;
+    } else {
+        score += 20;
+    }
 
     return Math.min(score, 100);
 }
@@ -2725,36 +2831,38 @@ function calculateAIProbability(numbers) {
  */
 function generateGoldenAiGames() {
     // 사용자에게 진행 알림 (버튼 비활성화)
-    const btn = document.getElementById('goldenAiBtnHeader');
+    const btn = document.getElementById('masterGenerateBtn') || document.getElementById('goldenAiBtnHeader');
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '✨ AI 분석 및 최적화 중...';
     }
 
+    // 황금 번호 초기화
+    AppState.goldenNumbers = new Set();
+
     setTimeout(() => {
+        // 통계적으로 가장 많이 나온 상위 10개 번호를 '황금 번호'로 임시 지정 (시각적 포인트)
+        if (AppState.winStats) {
+            const topNumbers = [...AppState.winStats]
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 10)
+                .map(s => s.number);
+            AppState.goldenNumbers = new Set(topNumbers);
+        }
+
+        const usedCombos = new Set();
         for (let i = 1; i <= 5; i++) {
-            let bestNumbers = [];
-            let maxScore = 0;
-
-            // 20번 정도 시도하여 가장 점수가 높은 조합 선택 (AI 최적화 시뮬레이션)
-            for (let attempt = 0; attempt < 100; attempt++) {
-                const candidate = [];
-                while (candidate.length < 6) {
-                    const n = Math.floor(Math.random() * 45) + 1;
-                    if (!candidate.includes(n)) candidate.push(n);
-                }
-                const currentScore = calculateAIProbability(candidate);
-                if (currentScore > maxScore) {
-                    maxScore = currentScore;
-                    bestNumbers = candidate;
-                }
-                if (maxScore >= 95) break; // 충분히 좋은 점수면 중단
+            let numbers = null;
+            for (let t = 0; t < 200; t++) {
+                const candidate = generateNumbersWithFilters([], false, usedCombos);
+                if (calculateAIProbability(candidate) >= 100) { numbers = candidate; break; }
             }
+            if (!numbers) numbers = generateNumbersWithFilters([], false, usedCombos);
+            usedCombos.add([...numbers].sort((a, b) => a - b).join(','));
 
-            // 생성된 번호 적용
-            AppState.setSelectedBalls[i - 1] = bestNumbers.sort((a, b) => a - b);
+            if (!AppState.setSelectedBalls) AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
+            AppState.setSelectedBalls[i - 1] = numbers;
 
-            // UI 업데이트
             const modeBtn = document.getElementById(`modeBtn${i}`);
             if (modeBtn) {
                 modeBtn.dataset.mode = 'auto';
@@ -2770,13 +2878,179 @@ function generateGoldenAiGames() {
 
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '🤖 AI 황금조합 ✓';
-            setTimeout(() => { btn.innerHTML = '🤖 AI 황금조합'; }, 2500);
+            btn.innerHTML = '행운번호 받기 ✓';
+            setTimeout(() => { btn.innerHTML = '행운번호 받기'; }, 2500);
         }
 
         updateSaveBoxState();
-        alert('AI가 당첨 확률을 최적화한 황금조합 5개를 생성했습니다! 🍀');
+        showGoldenAiAnalysis();
     }, 800);
+}
+
+function showGoldenAiAnalysis() {
+    const existing = document.querySelector('.golden-analysis-overlay');
+    if (existing) existing.remove();
+
+    const nextRound = (AppState && AppState.allLotto645Data && AppState.allLotto645Data[0])
+        ? AppState.allLotto645Data[0].round + 1 : '??';
+    const oeFilter = document.getElementById('filterOddEven')?.value || 'none';
+    const hcFilter = document.getElementById('filterHotCold')?.value || 'none';
+    const seqFilter = document.getElementById('filterConsecutive')?.value || 'none';
+    const acFilter = document.getElementById('filterAC')?.value || 'none';
+    const sumRange = getSumRange();
+    const { hot } = getOverallHotColdNumbers();
+    const hotSet = new Set(hot);
+
+    let gamesHtml = '';
+    let fullText = `✨ AI 추천 번호 분석 (${nextRound}회)\n${'─'.repeat(30)}\n`;
+
+    let displayIdx = 0;
+    for (let i = 0; i < 5; i++) {
+        const nums = (AppState.setSelectedBalls && AppState.setSelectedBalls[i]) || [];
+        if (nums.length !== 6) continue;
+        const sorted = [...nums].sort((a, b) => a - b);
+        const score = calculateAIProbability(sorted);
+        if (score < 100) continue;
+
+        displayIdx++;
+        const sum = sorted.reduce((a, b) => a + b, 0);
+        const oddCnt = sorted.filter(n => n % 2 !== 0).length;
+        const hotCnt = sorted.filter(n => hotSet.has(n)).length;
+        const seqPairs = countSequentialPairs(sorted);
+        const ac = calculateAC(sorted);
+
+        const ballsHtml = sorted.map(n =>
+            `<span class="stat-ball stat-ball--sm ${getBallColorClass(n)}" style="display:inline-flex;margin:0 1px;">${n}</span>`
+        ).join('');
+
+        gamesHtml += `
+            <div style="padding:6px 0;border-bottom:1px solid #eee;">
+                <div style="display:flex;align-items:center;gap:clamp(2px,1vw,6px);margin-bottom:3px;">
+                    <span style="font-weight:bold;color:${SHAREHARMONY_PALETTE.goldenDark};font-size:clamp(0.68rem,2.2vw,0.82rem);white-space:nowrap;">GAME ${displayIdx}</span>
+                    <span style="flex:1;text-align:center;line-height:1;">${ballsHtml}</span>
+                    <span style="font-size:clamp(0.65rem,2vw,0.75rem);font-weight:bold;color:${SHAREHARMONY_PALETTE.greenBtn};white-space:nowrap;">${score}%</span>
+                </div>
+                <div style="display:flex;justify-content:flex-end;align-items:center;gap:clamp(4px,1.5vw,8px);font-size:clamp(0.6rem,1.8vw,0.72rem);color:${SHAREHARMONY_PALETTE.textSecondary};">
+                    <span>합계 ${sum}</span>
+                    <span>홀짝 ${oddCnt}:${6 - oddCnt}</span>
+                    <span>핫콜 ${hotCnt}:${6 - hotCnt}</span>
+                    <span>연속 ${seqPairs}</span>
+                    <span>AC ${ac}</span>
+                </div>
+            </div>`;
+
+        fullText += `GAME ${displayIdx}: ${sorted.join(', ')}  합:${sum} 홀짝:${oddCnt}:${6 - oddCnt} 핫콜:${hotCnt}:${6 - hotCnt} 연속:${seqPairs} AC:${ac} 신뢰:${score}%\n`;
+    }
+    if (displayIdx === 0) {
+        gamesHtml = '<div style="text-align:center;padding:20px;color:#999;">100% 신뢰도 조합이 없습니다.</div>';
+    }
+
+    const filterInfo = [];
+    if (oeFilter !== 'none') filterInfo.push(`홀짝 ${oeFilter.replace('-', ':')}`);
+    if (hcFilter !== 'none') filterInfo.push(`핫콜 ${hcFilter.replace('-', ':')}`);
+    if (seqFilter !== 'none') filterInfo.push(`연속 ${seqFilter}`);
+    if (acFilter !== 'none') filterInfo.push(`AC ${acFilter}`);
+    filterInfo.push(`합계 ${sumRange.start}~${sumRange.end}`);
+    fullText += `${'─'.repeat(30)}\n적용필터: ${filterInfo.join(' | ')}\n`;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'golden-analysis-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+        <div style="background:#fff;border-radius:12px;padding:clamp(12px,3vw,20px);width:clamp(280px,70vw,380px);max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3);position:relative;">
+            <span onclick="this.closest('.golden-analysis-overlay').remove()" style="position:absolute;top:8px;right:12px;font-size:1.2rem;cursor:pointer;color:#999;">×</span>
+            <div style="text-align:center;font-weight:bold;font-size:clamp(0.85rem,2.5vw,1rem);color:${SHAREHARMONY_PALETTE.goldenDark};border-bottom:2px solid ${SHAREHARMONY_PALETTE.golden};padding-bottom:6px;margin-bottom:6px;">
+                ✨ AI 추천 번호 분석 (${nextRound}회)
+            </div>
+            <div style="font-size:clamp(0.6rem,1.8vw,0.72rem);color:${SHAREHARMONY_PALETTE.textSecondary};text-align:center;margin-bottom:6px;">
+                적용필터: ${filterInfo.join(' | ')}
+            </div>
+            ${gamesHtml}
+            <div style="margin-top:8px;padding:clamp(6px,2vw,10px);background:#f8f9fa;border-radius:8px;font-size:clamp(0.58rem,1.7vw,0.7rem);line-height:1.6;color:${SHAREHARMONY_PALETTE.textSecondary};">
+                <div style="font-weight:bold;color:${SHAREHARMONY_PALETTE.textPrimary};margin-bottom:4px;">📖 분석 항목 안내</div>
+                <div><b>합계</b> — 6개 번호의 합 (적용: ${sumRange.start}~${sumRange.end})</div>
+                <div><b>홀짝</b> — 홀수:짝수 비율 (적용: ${oeFilter !== 'none' ? oeFilter.replace('-', ':') : '전체'})</div>
+                <div><b>핫콜</b> — 핫:콜 비율 (적용: ${hcFilter !== 'none' ? hcFilter.replace('-', ':') : '전체'})</div>
+                <div><b>연속</b> — 연이은 번호 쌍 수 (적용: ${seqFilter !== 'none' ? seqFilter + '쌍' : '전체'})</div>
+                <div><b>AC</b> — 번호 간격 다양성 0~10 (적용: ${acFilter !== 'none' ? acFilter : '전체'})</div>
+                <div><b>신뢰도</b> — 위 5개 항목 필터 일치도 종합 점수</div>
+            </div>
+            <div style="display:flex;gap:clamp(4px,1.5vw,8px);margin-top:10px;">
+                <button id="goldenCopyTextBtn" data-text="${fullText.replace(/"/g, '&quot;')}"
+                    style="flex:1;padding:clamp(6px,2vw,10px);background:linear-gradient(135deg,${SHAREHARMONY_PALETTE.greenBtn},${SHAREHARMONY_PALETTE.greenBtnDark});color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:clamp(0.7rem,2vw,0.82rem);">
+                    📤 텍스트 복사
+                </button>
+                <button id="goldenSaveImageBtn"
+                    style="flex:1;padding:clamp(6px,2vw,10px);background:linear-gradient(135deg,${SHAREHARMONY_PALETTE.goldenDark},${SHAREHARMONY_PALETTE.golden});color:#fff;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:clamp(0.7rem,2vw,0.82rem);">
+                    📋 이미지 복사
+                </button>
+            </div>
+        </div>`;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#goldenCopyTextBtn').addEventListener('click', function () {
+        navigator.clipboard.writeText(this.dataset.text).then(() => {
+            alert('분석 결과가 복사되었습니다! 📋\n카톡이나 문자에 붙여넣어 공유하세요.');
+            overlay.remove();
+        });
+    });
+
+    overlay.querySelector('#goldenSaveImageBtn').addEventListener('click', function () {
+        const contentEl = overlay.querySelector('div > div');
+        if (!contentEl) return;
+        const btns = overlay.querySelector('#goldenCopyTextBtn')?.parentElement;
+        const closeBtn = overlay.querySelector('span[onclick]');
+        if (btns) btns.style.display = 'none';
+        if (closeBtn) closeBtn.style.display = 'none';
+        import('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js').catch(() => {}).then(() => {
+            if (typeof html2canvas === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                script.onload = () => captureAndSave(contentEl, btns, closeBtn, overlay);
+                document.head.appendChild(script);
+            } else {
+                captureAndSave(contentEl, btns, closeBtn, overlay);
+            }
+        });
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+}
+
+function captureAndSave(el, btns, closeBtn, overlay) {
+    html2canvas(el, { backgroundColor: '#fff', scale: 2 }).then(canvas => {
+        if (btns) btns.style.display = '';
+        if (closeBtn) closeBtn.style.display = '';
+        canvas.toBlob(function (blob) {
+            if (!blob) { alert('이미지 생성에 실패했습니다.'); return; }
+            if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+                navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob })
+                ]).then(() => {
+                    alert('이미지가 클립보드에 복사되었습니다! 📋\n카톡이나 메신저에 Ctrl+V로 붙여넣으세요.');
+                }).catch(() => {
+                    fallbackDownload(canvas);
+                });
+            } else {
+                fallbackDownload(canvas);
+            }
+        }, 'image/png');
+    }).catch(() => {
+        if (btns) btns.style.display = '';
+        if (closeBtn) closeBtn.style.display = '';
+        alert('이미지 생성에 실패했습니다.');
+    });
+}
+
+function fallbackDownload(canvas) {
+    const link = document.createElement('a');
+    link.download = 'AI_추천번호_분석.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    alert('클립보드 복사가 지원되지 않아 파일로 저장했습니다.');
 }
 
 /**
@@ -2797,12 +3071,12 @@ function drawPremiumTicket(numbers) {
     ctx.beginPath();
     ctx.roundRect ? ctx.roundRect(2, 2, 396, 276, 10) : ctx.rect(2, 2, 396, 276);
     ctx.fill();
-    ctx.strokeStyle = '#d4af37';
+    ctx.strokeStyle = SHAREHARMONY_PALETTE.goldenTicket;
     ctx.lineWidth = 4;
     ctx.stroke();
 
     // 2. 헤더 디자인
-    ctx.fillStyle = '#b8860b';
+    ctx.fillStyle = SHAREHARMONY_PALETTE.goldenDark;
     ctx.font = 'bold 20px "Malgun Gothic", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('✨ AI PREMIUM LUCKY TICKET ✨', 200, 40);
@@ -2814,7 +3088,7 @@ function drawPremiumTicket(numbers) {
     ctx.stroke();
 
     // 3. 회차 및 설명
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = SHAREHARMONY_PALETTE.textSecondary;
     ctx.font = '14px "Malgun Gothic"';
     ctx.fillText(`${nextRound}회차 당첨 기원 분석 조합`, 200, 75);
 
@@ -2839,7 +3113,7 @@ function drawPremiumTicket(numbers) {
         // 번호
         ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = SHAREHARMONY_PALETTE.white;
         ctx.font = 'bold 18px Arial';
         ctx.fillText(num, x, y + 6);
     });
@@ -2848,17 +3122,17 @@ function drawPremiumTicket(numbers) {
     const sum = sorted.reduce((a, b) => a + b, 0);
     const score = calculateAIProbability(sorted);
 
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = SHAREHARMONY_PALETTE.textPrimary;
     ctx.font = 'bold 13px "Malgun Gothic"';
     ctx.textAlign = 'left';
     ctx.fillText(`📊 분석 리포트`, 55, 190);
     ctx.font = '12px "Malgun Gothic"';
-    ctx.fillStyle = '#666';
+    ctx.fillStyle = SHAREHARMONY_PALETTE.textSecondary;
     ctx.fillText(`• 분석 스코어: ${score}%  • 합계: ${sum}  • 검증: AC ${calculateAC(sorted)}`, 55, 210);
     ctx.fillText(`• 로직: 통계 가중치 기반 다차원 필터링 최적화 조합`, 55, 228);
 
     // 6. 하단 푸터 및 워터마크
-    ctx.fillStyle = '#d4af37';
+    ctx.fillStyle = SHAREHARMONY_PALETTE.goldenTicket;
     ctx.font = 'italic bold 14px serif';
     ctx.textAlign = 'center';
     ctx.fillText('Dedicated to your Luck & Happiness', 200, 260);
@@ -2923,23 +3197,20 @@ function togglePremiumAiBox(btn) {
             btn.dataset.state = 'off';
             btn.textContent = '✨ 프리미엄 AI';
             btn.style.background = 'transparent';
-            btn.style.border = '1px solid #e87722';
-            btn.style.color = '#e87722';
+            btn.style.border = '1px solid ' + SHAREHARMONY_PALETTE.aiOrangeBorder;
+            btn.style.color = SHAREHARMONY_PALETTE.aiOrangeBorder;
         }
         if (premiumBox) premiumBox.style.display = 'none';
 
-        // 저장공 다시 표시
-        const saveBox = document.getElementById('saveBox');
-        if (saveBox) saveBox.style.display = 'block';
         if (wrapper) wrapper.style.minHeight = '0px';
     } else {
         // OFF → ON: premiumAiBox 표시
         if (btn) {
             btn.dataset.state = 'on';
             btn.textContent = '✨ 프리미엄 ON';
-            btn.style.background = 'linear-gradient(135deg, #FFD700, #FFA500)';
-            btn.style.border = '1px solid #FFD700';
-            btn.style.color = '#000';
+            btn.style.background = 'linear-gradient(135deg, ' + SHAREHARMONY_PALETTE.golden + ', #FFA500)';
+            btn.style.border = '1px solid ' + SHAREHARMONY_PALETTE.golden;
+            btn.style.color = SHAREHARMONY_PALETTE.black;
         }
         if (premiumBox) {
             premiumBox.style.display = 'block';
@@ -2965,9 +3236,7 @@ function togglePremiumAiBox(btn) {
             setPremiumAiDisplay(bestNumbers);
             drawPremiumTicket(bestNumbers);
 
-            // 저장공 완전히 숨기기
-            const saveBox = document.getElementById('saveBox');
-            if (saveBox) saveBox.style.display = 'none';
+            // saveBox는 필터 행으로 이동됨
 
             // 렌더링 후 실제 높이 측정
             requestAnimationFrame(() => {
@@ -3012,7 +3281,7 @@ function setPremiumAiDisplay(numbers) {
             📍 <b>합계 분석:</b> ${sum} (최빈 당첨 구간 진입 완료)<br>
             ⚖️ <b>홀짝 균형:</b> ${odd}:${even} (황금 비율 매칭)<br>
             📐 <b>수학적 안정성(AC):</b> ${acValue} (무작위성 검증 필)<br>
-            🏆 <b>AI 분석 신뢰도:</b> <span style="color: #d4af37; font-weight: bold;">${score}%</span> (프리미엄 등급)
+            🏆 <b>AI 분석 신뢰도:</b> <span style="color: ${SHAREHARMONY_PALETTE.goldenTicket}; font-weight: bold;">${score}%</span> (프리미엄 등급)
         </div>
     `;
 
@@ -3058,57 +3327,84 @@ AI 최적화 분석 번호입니다.
  */
 /** 구간선택(시작~종료) 값 반환. 입력값 없으면 AppState 또는 21/255 사용 */
 function getSumRange() {
-    const startEl = document.getElementById('sumRangeStart');
-    const endEl = document.getElementById('sumRangeEnd');
-    let start = startEl && startEl.value !== '' ? parseInt(startEl.value, 10) : (AppState.sumRangeStart != null ? AppState.sumRangeStart : 21);
-    let end = endEl && endEl.value !== '' ? parseInt(endEl.value, 10) : (AppState.sumRangeEnd != null ? AppState.sumRangeEnd : 255);
+    const startEl = document.getElementById('filterAvgLow');
+    const endEl = document.getElementById('filterAvgHigh');
+    let start = startEl && startEl.value !== '' ? parseFloat(startEl.value) : (AppState.sumRangeStart != null ? AppState.sumRangeStart : 21);
+    let end = endEl && endEl.value !== '' ? parseFloat(endEl.value) : (AppState.sumRangeEnd != null ? AppState.sumRangeEnd : 255);
     if (isNaN(start) || start < 21) start = 21;
     if (isNaN(end) || end > 255) end = 255;
     if (start > end) start = end;
     return { start: start, end: end };
 }
 
-function generateNumbersWithFilters(existingNumbers = [], skipSumRange) {
-    var sumRange = skipSumRange ? null : getSumRange();
-    var maxAttempts = 500;
-    for (var attempt = 0; attempt < maxAttempts; attempt++) {
-        const oddEvenFilter = document.getElementById('oddEvenFilter')?.value || 'none';
-        const sequenceFilter = document.getElementById('sequenceFilter')?.value || 'none';
-        const hotColdFilter = document.getElementById('hotColdFilter')?.value || 'none';
-
-        var candidate = pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existingNumbers);
-
-        if (!candidate || candidate.length !== 6) {
-            candidate = pickSix();
-        }
-        if (candidate && candidate.length === 6) {
-            if (sumRange) {
-                var sum = candidate.reduce(function (a, b) { return a + b; }, 0);
-                if (sum >= sumRange.start && sum <= sumRange.end) return candidate;
-            } else {
-                return candidate;
+function isPastWinningCombo(numbers) {
+    if (!AppState.allLotto645Data || AppState.allLotto645Data.length === 0) return false;
+    var key = [...numbers].sort(function (a, b) { return a - b; }).join(',');
+    if (!AppState._pastWinKeySet) {
+        AppState._pastWinKeySet = new Set();
+        AppState.allLotto645Data.forEach(function (r) {
+            if (r.numbers && r.numbers.length === 6) {
+                AppState._pastWinKeySet.add([...r.numbers].sort(function (a, b) { return a - b; }).join(','));
             }
-        }
+        });
     }
-    return pickSix();
+    return AppState._pastWinKeySet.has(key);
+}
+
+function generateNumbersWithFilters(existingNumbers = [], skipSumRange, excludeCombos) {
+    var sumRange = skipSumRange ? null : getSumRange();
+    var maxAttempts = 300;
+    const oddEvenFilter = document.getElementById('filterOddEven')?.value || 'none';
+    const sequenceFilter = document.getElementById('filterConsecutive')?.value || 'none';
+    const hotColdFilter = document.getElementById('filterHotCold')?.value || 'none';
+    const acFilter = document.getElementById('filterAC')?.value || 'none';
+    
+    // 제외수 파싱
+    const excludeEl = document.getElementById('filterExclude');
+    let excludeNumbers = [];
+    if (excludeEl && excludeEl.value.trim() !== '') {
+        excludeNumbers = excludeEl.value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= 45);
+    }
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+        var candidate = pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existingNumbers, acFilter, excludeNumbers);
+
+        if (!candidate || candidate.length !== 6) continue;
+
+        if (sumRange) {
+            var sum = candidate.reduce(function (a, b) { return a + b; }, 0);
+            if (sum < sumRange.start || sum > sumRange.end) continue;
+        }
+        if (isPastWinningCombo(candidate)) continue;
+        if (excludeCombos && excludeCombos.size > 0) {
+            var comboKey = [...candidate].sort(function (a, b) { return a - b; }).join(',');
+            if (excludeCombos.has(comboKey)) continue;
+        }
+        return candidate;
+    }
+    return pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existingNumbers, acFilter, excludeNumbers) || pickSix(excludeNumbers);
 }
 
 /**
  * 필터를 적용한 번호 선택
  */
-function pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existingNumbers = []) {
-    const maxAttempts = 1000;
+function pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existingNumbers = [], acFilter, excludeNumbers = []) {
+    const maxAttempts = 500;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         // 기존 번호가 있으면 그것을 포함하여 선택
         let selected;
         if (existingNumbers.length > 0) {
             const remaining = 6 - existingNumbers.length;
-            const pool = getAllNumbers().filter(n => !existingNumbers.includes(n));
+            let pool = getAllNumbers().filter(n => !existingNumbers.includes(n));
+            if (excludeNumbers.length > 0) {
+                const exSet = new Set(excludeNumbers);
+                pool = pool.filter(n => !exSet.has(n));
+            }
             const shuffled = [...pool].sort(() => Math.random() - 0.5);
             selected = [...existingNumbers, ...shuffled.slice(0, remaining)];
         } else {
-            selected = pickSix();
+            selected = pickSix(excludeNumbers);
         }
 
         selected = selected.sort((a, b) => a - b);
@@ -3117,7 +3413,11 @@ function pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existi
         selected = [...new Set(selected)];
         if (selected.length < 6) {
             // 중복 제거 후 부족하면 추가 선택
-            const pool = getAllNumbers().filter(n => !selected.includes(n));
+            let pool = getAllNumbers().filter(n => !selected.includes(n));
+            if (excludeNumbers.length > 0) {
+                const exSet = new Set(excludeNumbers);
+                pool = pool.filter(n => !exSet.has(n));
+            }
             const shuffled = [...pool].sort(() => Math.random() - 0.5);
             selected = [...selected, ...shuffled.slice(0, 6 - selected.length)].slice(0, 6);
             selected = selected.sort((a, b) => a - b);
@@ -3136,16 +3436,14 @@ function pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existi
 
         // 연속 검증
         if (sequenceFilter !== 'none') {
-            const requiredPairs = parseInt(sequenceFilter);
+            const target = parseInt(sequenceFilter, 10);
             const pairs = countSequentialPairs(selected);
-            if (pairs !== requiredPairs) {
-                continue;
-            }
-        } else {
-            // 연속없음: 연속이 없어야 함
-            const pairs = countSequentialPairs(selected);
-            if (pairs > 0) {
-                continue;
+            if (target === 0) {
+                if (pairs !== 0) continue;
+            } else if (target === 3) {
+                if (pairs < 3) continue;
+            } else {
+                if (pairs !== target) continue;
             }
         }
 
@@ -3161,6 +3459,13 @@ function pickSixWithFilters(oddEvenFilter, sequenceFilter, hotColdFilter, existi
             if (hotCount !== targetHot || coldCount !== targetCold) {
                 continue;
             }
+        }
+
+        // AC 검증
+        if (acFilter && acFilter !== 'none') {
+            const targetAC = parseInt(acFilter, 10);
+            const ac = calculateAC(selected);
+            if (ac !== targetAC) continue;
         }
 
         // 모든 조건을 만족하면 반환
@@ -3311,9 +3616,9 @@ async function saveGamesToCSV() {
 
     // 체크된 새 게임들 확인
     const gamesToSave = [];
-    const oddEvenFilter = document.getElementById('oddEvenFilter')?.value || 'none';
-    const sequenceFilter = document.getElementById('sequenceFilter')?.value || 'none';
-    const hotColdFilter = document.getElementById('hotColdFilter')?.value || 'none';
+    const oddEvenFilter = document.getElementById('filterOddEven')?.value || 'none';
+    const sequenceFilter = document.getElementById('filterConsecutive')?.value || 'none';
+    const hotColdFilter = document.getElementById('filterHotCold')?.value || 'none';
 
     const mapRatioToNumber = (value) => {
         if (value === 'none') return -1;
@@ -3361,13 +3666,25 @@ async function saveGamesToCSV() {
                     }
                 }
 
+                const actualOdd = sorted.filter(n => n % 2 === 1).length;
+                const actualSeq = (() => {
+                    let cnt = 0;
+                    for (let j = 1; j < sorted.length; j++) { if (sorted[j] - sorted[j - 1] === 1) cnt++; }
+                    return cnt;
+                })();
+                const actualHot = (() => {
+                    const { hot } = getHotColdNumbersBeforeRound(round);
+                    const hotSet = new Set(hot);
+                    return sorted.filter(n => hotSet.has(n)).length;
+                })();
+
                 gamesToSave.push({
                     '회차': round.toString(),
                     '세트': '',
                     '게임': i.toString(),
-                    '홀짝': oddEvenValue === -1 ? '' : oddEvenValue.toString(),
-                    '연속': sequenceValue.toString(),
-                    '핫콜': hotColdValue === -1 ? '' : hotColdValue.toString(),
+                    '홀짝': (oddEvenValue === -1 ? actualOdd : oddEvenValue).toString(),
+                    '연속': (sequenceValue === 0 ? actualSeq : sequenceValue).toString(),
+                    '핫콜': (hotColdValue === -1 ? actualHot : hotColdValue).toString(),
                     '게임선택': gameMode,
                     '선택1': sorted[0].toString(),
                     '선택2': sorted[1].toString(),
@@ -3449,13 +3766,13 @@ function setupDeleteSelectedButton() {
         const checkedBoxes = document.querySelectorAll('.result-delete-checkbox:checked');
         if (checkedBoxes.length > 0) {
             deleteSelectedBtn.disabled = false;
-            deleteSelectedBtn.style.color = '#ff9800';
-            deleteSelectedBtn.style.borderColor = '#ff9800';
+            deleteSelectedBtn.style.color = SHAREHARMONY_PALETTE.aiOrange;
+            deleteSelectedBtn.style.borderColor = SHAREHARMONY_PALETTE.aiOrange;
             deleteSelectedBtn.style.cursor = 'pointer';
         } else {
             deleteSelectedBtn.disabled = true;
-            deleteSelectedBtn.style.color = '#ccc';
-            deleteSelectedBtn.style.borderColor = '#ccc';
+            deleteSelectedBtn.style.color = SHAREHARMONY_PALETTE.textMuted;
+            deleteSelectedBtn.style.borderColor = SHAREHARMONY_PALETTE.textMuted;
             deleteSelectedBtn.style.cursor = 'default';
         }
         updateSaveBoxState(); // 선택 상태에 따라 저장 버튼 활성/비활성 업데이트
@@ -3589,7 +3906,7 @@ async function loadAndDisplayResults() {
         const lotto023Data = await loadLotto023Data();
 
         if (!lotto023Data || lotto023Data.length === 0) {
-            resultContainer.innerHTML = '<p style="text-align: center; color: #666; font-size: 0.9rem;">저장된 결과가 없습니다.</p>';
+            resultContainer.innerHTML = '<p style="text-align: center; color: ' + SHAREHARMONY_PALETTE.textSecondary + '; font-size: 0.9rem;">저장된 결과가 없습니다.</p>';
             const summaryContainer = document.getElementById('resultSummary');
             if (summaryContainer) summaryContainer.innerHTML = '';
             return;
@@ -3626,9 +3943,9 @@ async function loadAndDisplayResults() {
         const summaryContainer = document.getElementById('resultSummary');
         if (summaryContainer) {
             summaryContainer.innerHTML = `
-                전체 <span style="font-weight: bold;">${summary.total}게임</span> 
-                <span style="color: #ccc; margin: 0 4px;">/</span> 
-                ${summaryHtml || '<span style="color: #999; font-weight: normal;">미추첨 내역</span>'}
+                전체 <span style="font-weight: bold;">${summary.total}게임</span>
+                <span style="color: ${SHAREHARMONY_PALETTE.textMuted}; margin: 0 4px;">/</span>
+                ${summaryHtml || '<span style="color: ' + SHAREHARMONY_PALETTE.textMuted + '; font-weight: normal;">미추첨 내역</span>'}
             `;
         }
 
@@ -3654,10 +3971,10 @@ async function loadAndDisplayResults() {
                 resultLine.style.display = 'flex';
                 resultLine.style.alignItems = 'center';
                 resultLine.style.gap = '8px';
-                resultLine.style.padding = '4px 6px';
-                resultLine.style.minHeight = '32px';
+                resultLine.style.padding = '0 6px';
+                resultLine.style.height = '24px';
+                resultLine.style.minHeight = '24px';
                 resultLine.style.boxSizing = 'border-box';
-                resultLine.style.borderBottom = '1px solid #e0e0e0';
 
                 // 정보 표시: 회차 / 게임 / 홀짝 / 연속 / 핫콜 / 모드
                 const infoText = document.createElement('div');
@@ -3665,15 +3982,17 @@ async function loadAndDisplayResults() {
                 infoText.style.alignItems = 'center';
                 infoText.style.gap = '6px';
                 infoText.style.fontSize = '0.8em';
-                infoText.style.color = '#000000';
+                infoText.style.color = SHAREHARMONY_PALETTE.textPrimary;
                 infoText.style.fontWeight = 'normal';
-                infoText.style.width = '240px';
-                infoText.style.flexShrink = '0';
+                infoText.style.minWidth = '140px';
+                infoText.style.flex = '1';
                 infoText.style.whiteSpace = 'nowrap'; // 한 줄로 출력 보장
+                infoText.style.overflow = 'hidden';
+                infoText.style.textOverflow = 'ellipsis';
 
-                const oe = game.oddEven !== undefined && game.oddEven !== "" ? game.oddEven : "-";
-                const seq = game.sequence !== undefined && game.sequence !== "" ? game.sequence : "-";
-                const hc = game.hotCold !== undefined && game.hotCold !== "" ? game.hotCold : "-";
+                const oe = (game.oddEven != null && game.oddEven !== "") ? game.oddEven : "-";
+                const seq = (game.sequence != null && game.sequence !== "") ? game.sequence : "-";
+                const hc = (game.hotCold != null && game.hotCold !== "") ? game.hotCold : "-";
                 const mode = game.gameMode || "-";
 
                 const setVal = game.set !== undefined ? game.set : game['세트'];
@@ -3692,8 +4011,8 @@ async function loadAndDisplayResults() {
                             4: '#AAAAAA', // 4등 (회색)
                             5: '#B0D840'  // 5등 (연두색)
                         };
-                        const color = rankColors[result.rank] || '#eee';
-                        rankBadgeHtml = `<span style="background-color: ${color}; color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; margin-right: 8px;">${result.rank}등</span>`;
+                        const color = rankColors[result.rank] || SHAREHARMONY_PALETTE.bgLighter;
+                        rankBadgeHtml = `<span style="background-color: ${color}; color: ${SHAREHARMONY_PALETTE.white}; padding: 1px 6px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; margin-right: 8px;">${result.rank}등</span>`;
                     }
 
                     // 당첨된 번호 강조를 위해 셋 준비
@@ -3710,32 +4029,30 @@ async function loadAndDisplayResults() {
                 resultBallsContainer.style.alignItems = 'center';
                 resultBallsContainer.style.marginLeft = 'auto';
                 resultBallsContainer.style.width = '260px'; // 전체 공 + 체크박스 정렬을 위해 확보 (배지 추가 고려하여 너비 유지)
-                resultBallsContainer.style.justifyContent = 'flex-start';
+                resultBallsContainer.style.justifyContent = 'flex-end';
 
                 // 결과공 생성 (6개)
                 if (game.numbers && Array.isArray(game.numbers)) {
                     game.numbers.slice(0, 6).forEach(num => {
-                        const ball = createStatBall(num, 20, '0.75rem');
+                        const ball = createStatBall(num, 22, '0.8rem');
 
-                        // [수정] 해당 회차 당첨번호와 대조하여 미당첨 번호만 하얗게 처리 (기존 로직 보완)
+                        // [수정] 사용자의 요청: 저장공은 기본 흰색, 당첨 회차와 일치하는 번호만 컬러 적용
                         if (winningNumbers) {
                             if (!winningNumbers.has(num)) {
-                                ball.style.backgroundColor = '#ffffff';
-                                ball.style.color = '#000000';
-                                ball.style.border = '1.5px solid #000000';
-                                ball.className = 'stat-ball';
-                                ball.style.opacity = '0.6'; // 미당첨 강조 줄임
+                                // 미당첨 번호: 화이트 스타일 강제 적용
+                                ball.classList.add('saved-white');
+                                ball.classList.remove(getBallColorClass(num));
+                                ball.style.opacity = '0.6';
                             } else {
-                                // 당첨된 공은 더 선명하게 혹은 테두리 강조
-                                ball.style.boxShadow = '0 0 5px rgba(0,0,0,0.3)';
+                                // 당첨된 공만 컬러 유지 (기본 createStatBall에서 적용됨)
+                                ball.style.boxShadow = '0 0 8px rgba(0,0,0,0.4)';
                                 ball.style.fontWeight = 'bold';
+                                ball.style.transform = 'scale(1.1)';
                             }
                         } else {
-                            // 당첨 데이터가 없는 경우 (미래 회차)
-                            ball.style.backgroundColor = '#ffffff';
-                            ball.style.color = '#000000';
-                            ball.style.border = '1.5px solid #000000';
-                            ball.className = 'stat-ball';
+                            // 당첨 데이터가 없는 경우 (미래 회차): 기본 흰색
+                            ball.classList.add('saved-white');
+                            ball.classList.remove(getBallColorClass(num));
                         }
                         resultBallsContainer.appendChild(ball);
                     });
@@ -3745,9 +4062,9 @@ async function loadAndDisplayResults() {
                 const slot7 = document.createElement('div');
                 slot7.style.display = 'flex';
                 slot7.style.alignItems = 'center';
-                slot7.style.justifyContent = 'flex-start'; // 왼쪽 정렬하여 보너스공과 체크박스 인접
-                slot7.style.width = '60px'; // 보너스 공 + 체크박스를 위한 충분한 너비
-                slot7.style.gap = '8px';
+                slot7.style.justifyContent = 'center'; // 보너스공 중앙 정렬
+                slot7.style.minWidth = '0';
+                slot7.style.gap = '0';
                 slot7.style.flexShrink = '0';
 
                 if (winRound && winRound.bonus) {
@@ -3757,7 +4074,7 @@ async function loadAndDisplayResults() {
                     separator.style.margin = '0 2px';
                     slot7.appendChild(separator);
 
-                    const bonusBall = createStatBall(winRound.bonus, 20, '0.75rem');
+                    const bonusBall = createStatBall(winRound.bonus, 22, '0.8rem');
 
                     // [수정] 보너스 번호 일치 여부 확인 (2등 여부와 관련)
                     if (game.numbers && game.numbers.includes(winRound.bonus)) {
@@ -3765,8 +4082,8 @@ async function loadAndDisplayResults() {
                         bonusBall.style.fontWeight = 'bold';
                     } else {
                         bonusBall.style.opacity = '0.6';
-                        bonusBall.style.backgroundColor = '#ffffff';
-                        bonusBall.style.color = '#000000';
+                        bonusBall.style.backgroundColor = SHAREHARMONY_PALETTE.white;
+                        bonusBall.style.color = SHAREHARMONY_PALETTE.black;
                         bonusBall.style.border = '1.5px solid #000000';
                     }
                     slot7.appendChild(bonusBall);
@@ -3774,7 +4091,7 @@ async function loadAndDisplayResults() {
                     // 당첨 데이터가 아예 없는 경우 (미래 회차 등) 빈 칸 표시 유지 혹은 기본 스타일
                 }
 
-                // 삭제용 체크박스 (보너스 공 바로 뒤 또는 그 자리에 위치)
+                // 삭제용 체크박스 생성
                 const deleteCheckbox = document.createElement('input');
                 deleteCheckbox.type = 'checkbox';
                 deleteCheckbox.className = 'result-delete-checkbox';
@@ -3782,18 +4099,18 @@ async function loadAndDisplayResults() {
                 deleteCheckbox.style.width = '18px';
                 deleteCheckbox.style.height = '18px';
                 deleteCheckbox.style.flexShrink = '0';
-                deleteCheckbox.style.accentColor = '#ff4d4f';
+                deleteCheckbox.style.marginLeft = '4px'; // 오른쪽 끝 여백
+                deleteCheckbox.style.accentColor = 'var(--color-accent)';
 
-                // 데이터 정보 연결
                 deleteCheckbox.dataset.round = game.round;
                 deleteCheckbox.dataset.set = (game.set !== undefined ? game.set : game['세트']) || '';
                 deleteCheckbox.dataset.game = game.game;
 
-                slot7.appendChild(deleteCheckbox);
                 resultBallsContainer.appendChild(slot7);
 
                 resultLine.appendChild(infoText);
                 resultLine.appendChild(resultBallsContainer);
+                resultLine.appendChild(deleteCheckbox); // 체크박스를 가장 우측에 배치
                 resultContainer.appendChild(resultLine);
             });
         });
@@ -3982,6 +4299,103 @@ function formatDateYYMMDD(date) {
 }
 
 /**
+ * 8자리 숫자를 yy/mm/dd 형식으로 치환 (조회기간 검증용)
+ * - 19xx/20xx 시작 시 YYYYMMDD → yy/mm/dd
+ * - 00000000 → 00/00/00
+ * - 그 외 8자리 시 YYMMDDxx → yy/mm/dd (앞 6자리 사용)
+ */
+function formatEightDigitsToYYMMDD(str) {
+    if (!str || typeof str !== 'string') return '';
+    const digits = str.replace(/\D/g, '');
+    if (digits.length !== 8) return '';
+    const a = digits.substring(0, 2);
+    let yy, mm, dd;
+    if (a === '19' || a === '20') {
+        yy = digits.substring(2, 4);
+        mm = digits.substring(4, 6);
+        dd = digits.substring(6, 8);
+    } else {
+        yy = digits.substring(0, 2);
+        mm = digits.substring(2, 4);
+        dd = digits.substring(4, 6);
+    }
+    return yy + '/' + mm + '/' + dd;
+}
+
+/**
+ * 조회기간 입력을 yy/mm/dd 형식으로 통일
+ * - 8자리 숫자, 00000000 → yy/mm/dd
+ * - 999999, 99999999 → 당일(yy/mm/dd)
+ * - yyyy-mm-dd, yyyy/mm/dd → yy/mm/dd
+ * @returns {string|null} yy/mm/dd 문자열 또는 변환 불가 시 null
+ */
+function normalizeToYYMMDD(value) {
+    if (!value || typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const digitsOnly = trimmed.replace(/\D/g, '');
+
+    // 999999 또는 99999999 → 당일
+    if (digitsOnly === '999999' || digitsOnly === '99999999') {
+        return formatDateYYMMDD(new Date());
+    }
+
+    // 8자리 숫자 (00000000 포함)
+    if (digitsOnly.length === 8) {
+        const formatted = formatEightDigitsToYYMMDD(digitsOnly);
+        return formatted || null;
+    }
+
+    // yyyy-mm-dd
+    const dashMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dashMatch) {
+        const yy = dashMatch[1].substring(2);
+        return `${yy}/${dashMatch[2]}/${dashMatch[3]}`;
+    }
+
+    // yyyy/mm/dd
+    const slashMatch = trimmed.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+    if (slashMatch) {
+        const yy = slashMatch[1].substring(2);
+        return `${yy}/${slashMatch[2]}/${slashMatch[3]}`;
+    }
+
+    // 이미 yy/mm/dd 형식 (2자리/2자리/2자리)
+    if (/^\d{2}\/\d{2}\/\d{2}$/.test(trimmed)) {
+        return trimmed;
+    }
+
+    return null;
+}
+
+/**
+ * 조회기간 yy/mm/dd 형식 검증 (유효한 날짜인지 확인)
+ * 00/00/00(00000000 치환)은 전체 구간용으로 허용
+ * @returns {{ valid: boolean, message?: string }}
+ */
+function validateYYMMDDInput(str) {
+    if (!str || !str.trim()) return { valid: true };
+    const value = str.trim();
+    if (!/^\d{2}\/\d{2}\/\d{2}$/.test(value)) {
+        return { valid: false, message: '조회기간은 yy/mm/dd 형식으로 입력해 주세요. (예: 26/03/09)' };
+    }
+    if (value === '00/00/00') return { valid: true };
+    const date = parseDate(value);
+    if (!date || date === '000000' || date === '999999') {
+        return { valid: false, message: '유효한 날짜가 아닙니다. (yy/mm/dd)' };
+    }
+    if (isNaN(date.getTime())) {
+        return { valid: false, message: '유효한 날짜가 아닙니다.' };
+    }
+    const [, mm, dd] = value.split('/').map(Number);
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) {
+        return { valid: false, message: '월(01-12), 일(01-31)을 확인해 주세요.' };
+    }
+    return { valid: true };
+}
+
+/**
  * YYYY-MM-DD 형식을 yy/mm/dd 형식으로 변환
  */
 function convertToYYMMDD(dateString) {
@@ -3992,13 +4406,13 @@ function convertToYYMMDD(dateString) {
 }
 
 /**
- * yy/mm/dd 형식을 YYYY-MM-DD 형식으로 변환 (000000/999999 특수 처리)
+ * yy/mm/dd 형식을 YYYY-MM-DD 형식으로 변환 (000000/999999/00/00/00 특수 처리)
  */
 function convertFromYYMMDD(dateString) {
     if (!dateString) return '';
-    // 000000 또는 999999는 그대로 반환
-    if (dateString.trim() === '000000' || dateString.trim() === '999999') {
-        return dateString.trim();
+    const trimmed = dateString.trim();
+    if (trimmed === '000000' || trimmed === '999999' || trimmed === '00/00/00') {
+        return trimmed === '00/00/00' ? '000000' : trimmed;
     }
     const date = parseDate(dateString);
     if (!date) return dateString;
@@ -4095,8 +4509,8 @@ function findRoundFromDateInput(dateInput, isStartDate) {
 
     // 날짜 형식 처리 (6자리 숫자 또는 yy/mm/dd 형식)
     if (/^\d{6}$/.test(value) || value.includes('/') || value.includes('-')) {
-        // 특수값 000000 또는 999999 처리
-        if (value === '000000') {
+        // 특수값 000000, 00/00/00 또는 999999 처리
+        if (value === '000000' || value === '00/00/00') {
             // 첫회차 (Lotto645.csv에서 가장 오래된 회차)
             if (lotto645Data.length > 0) {
                 const firstRound = lotto645Data[lotto645Data.length - 1];
@@ -4347,7 +4761,38 @@ function syncDateToRound() {
 
 
 function setupRangeTypeSelectors() {
-    // 이제 단일 필드이므로 이전의 복잡한 라디오 형태는 무시
+    const roundRadio = document.getElementById('rangeTypeRound');
+    const dateRadio = document.getElementById('rangeTypeDate');
+    const startRound = document.getElementById('startRound');
+    const endRound = document.getElementById('endRound');
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    const startRoundDateSpan = document.getElementById('startRoundDate');
+    const endRoundDateSpan = document.getElementById('endRoundDate');
+    if (!roundRadio || !dateRadio) return;
+
+    function syncFields() {
+        if (roundRadio.checked) {
+            if (startDate) startDate.value = '';
+            if (endDate) endDate.value = '';
+            if (startRoundDateSpan) {
+                const d = convertRoundToDate(startRound.value);
+                startRoundDateSpan.textContent = d ? '(' + d + ')' : '';
+            }
+            if (endRoundDateSpan) {
+                const d = convertRoundToDate(endRound.value);
+                endRoundDateSpan.textContent = d ? '(' + d + ')' : '';
+            }
+        } else {
+            if (startRound) startRound.value = '';
+            if (endRound) endRound.value = '';
+            if (startRoundDateSpan) startRoundDateSpan.textContent = '';
+            if (endRoundDateSpan) endRoundDateSpan.textContent = '';
+        }
+    }
+
+    roundRadio.addEventListener('change', syncFields);
+    dateRadio.addEventListener('change', syncFields);
 }
 
 
@@ -4421,56 +4866,48 @@ function extractAndApplyFilters(filteredData) {
     const oddEvenCounts = {};
     const sequenceCounts = {};
     const hotColdCounts = {};
+    const acCounts = {};
     let minSum = Infinity;
     let maxSum = -Infinity;
 
-    // 핫/콜 기준은 전체 역대 데이터를 기반으로 함 (일관된 분석을 위함)
-    const { hot, cold } = getOverallHotColdNumbers();
-    const hotSet = new Set(hot);
+    const hcResult = sortAndSplitHotCold(calculateWinStats(filteredData), calculateAppearanceStats(filteredData));
+    const hotSet = new Set(hcResult.hot);
 
     filteredData.forEach(round => {
         const nums = round.numbers;
         if (!nums || nums.length !== 6) return;
 
-        // 1. 홀짝 비율 (홀수 개수:짝수 개수)
         let oddCount = 0;
         nums.forEach(n => { if (n % 2 !== 0) oddCount++; });
-        const evenCount = 6 - oddCount;
-        const oeKey = `${oddCount}-${evenCount}`;
+        const oeKey = `${oddCount}-${6 - oddCount}`;
         oddEvenCounts[oeKey] = (oddEvenCounts[oeKey] || 0) + 1;
 
-        // 2. 연속 회수 (연속된 번호 쌍의 개수)
         const sorted = [...nums].sort((a, b) => a - b);
         let seqPairCount = 0;
         for (let i = 0; i < sorted.length - 1; i++) {
             if (sorted[i + 1] === sorted[i] + 1) seqPairCount++;
         }
-        // UI 필터링 옵션은 1, 2, 3임. 3 이상은 3으로 처리.
         const seqKey = seqPairCount === 0 ? "none" : (seqPairCount >= 3 ? "3" : seqPairCount.toString());
         sequenceCounts[seqKey] = (sequenceCounts[seqKey] || 0) + 1;
 
-        // 3. 핫콜 비율 (핫 번호 개수:콜 번호 개수)
         let hotCount = 0;
-        nums.forEach(n => { if (hotSet.has(n)) hotCount++; });
-        const coldCount = 6 - hotCount;
-        const hcKey = `${hotCount}-${coldCount}`;
+        nums.forEach(n => { if (hotSet.has(parseInt(n, 10))) hotCount++; });
+        const hcKey = `${hotCount}-${6 - hotCount}`;
         hotColdCounts[hcKey] = (hotColdCounts[hcKey] || 0) + 1;
 
-        // 4. 합계
+        const ac = calculateAC(sorted);
+        const acKey = ac.toString();
+        acCounts[acKey] = (acCounts[acKey] || 0) + 1;
+
         const sum = nums.reduce((a, b) => a + b, 0);
         if (sum < minSum) minSum = sum;
         if (sum > maxSum) maxSum = sum;
     });
 
-    // 가장 많이 출현한 항목 찾기 (Mode)
     const getMode = (counts) => {
-        let mode = 'none';
-        let maxFreq = -1;
+        let mode = 'none', maxFreq = -1;
         for (const key in counts) {
-            if (counts[key] > maxFreq) {
-                maxFreq = counts[key];
-                mode = key;
-            }
+            if (counts[key] > maxFreq) { maxFreq = counts[key]; mode = key; }
         }
         return mode;
     };
@@ -4478,15 +4915,15 @@ function extractAndApplyFilters(filteredData) {
     const bestOE = getMode(oddEvenCounts);
     const bestSeq = getMode(sequenceCounts);
     const bestHC = getMode(hotColdCounts);
+    const bestAC = getMode(acCounts);
 
-    // console.log(`[Extract] Best OE: ${bestOE}, Best Seq: ${bestSeq}, Best HC: ${bestHC}, Sum: ${minSum}~${maxSum}`);
-
-    // UI에 적용
-    const oeEl = document.getElementById('oddEvenFilter');
-    const seqEl = document.getElementById('sequenceFilter');
-    const hcEl = document.getElementById('hotColdFilter');
-    const sumStartEl = document.getElementById('sumRangeStart');
-    const sumEndEl = document.getElementById('sumRangeEnd');
+    // 게임공(가운데) 패널 필터에 적용
+    const oeEl = document.getElementById('filterOddEven');
+    const seqEl = document.getElementById('filterConsecutive');
+    const hcEl = document.getElementById('filterHotCold');
+    const acEl = document.getElementById('filterAC');
+    const sumLowEl = document.getElementById('filterAvgLow');
+    const sumHighEl = document.getElementById('filterAvgHigh');
 
     if (oeEl) {
         if ([...oeEl.options].some(opt => opt.value === bestOE)) oeEl.value = bestOE;
@@ -4500,13 +4937,26 @@ function extractAndApplyFilters(filteredData) {
         if ([...hcEl.options].some(opt => opt.value === bestHC)) hcEl.value = bestHC;
         else hcEl.value = 'none';
     }
-    if (sumStartEl && minSum !== Infinity) {
-        sumStartEl.value = minSum;
-        AppState.sumRangeStart = minSum;
+    if (acEl) {
+        if ([...acEl.options].some(opt => opt.value === bestAC)) acEl.value = bestAC;
+        else acEl.value = 'none';
     }
-    if (sumEndEl && maxSum !== -Infinity) {
-        sumEndEl.value = maxSum;
-        AppState.sumRangeEnd = maxSum;
+    var chartVals = AppState.chartEndRoundValues;
+    var chartMin = (chartVals && chartVals.min != null) ? parseFloat(chartVals.min.toFixed(1)) : null;
+    var chartMax = (chartVals && chartVals.max != null) ? parseFloat(chartVals.max.toFixed(1)) : null;
+    if (sumLowEl) {
+        var lowVal = chartMin != null ? chartMin : (minSum !== Infinity ? minSum : null);
+        if (lowVal != null) {
+            sumLowEl.value = lowVal;
+            AppState.sumRangeStart = lowVal;
+        }
+    }
+    if (sumHighEl) {
+        var highVal = chartMax != null ? chartMax : (maxSum !== -Infinity ? maxSum : null);
+        if (highVal != null) {
+            sumHighEl.value = highVal;
+            AppState.sumRangeEnd = highVal;
+        }
     }
 }
 
@@ -4542,17 +4992,40 @@ function updateStatsByDateRange() {
             return;
         }
 
-    } else { // date
+    } else { // date — 조회기간 yy/mm/dd 검증
         const startDateInput = document.getElementById('startDate');
         const endDateInput = document.getElementById('endDate');
 
         if (!startDateInput || !endDateInput) return;
 
-        const startDateValue = startDateInput.value.trim();
-        const endDateValue = endDateInput.value.trim();
+        let startDateValue = startDateInput.value.trim();
+        let endDateValue = endDateInput.value.trim();
 
         if (!startDateValue || !endDateValue) {
             alert('조회할 기간을 입력해주세요.');
+            return;
+        }
+
+        // 8자리, 00000000, yyyy-mm-dd, yyyy/mm/dd → yy/mm/dd 치환
+        const normStart = normalizeToYYMMDD(startDateValue);
+        if (normStart !== null) {
+            startDateInput.value = normStart;
+            startDateValue = normStart;
+        }
+        const normEnd = normalizeToYYMMDD(endDateValue);
+        if (normEnd !== null) {
+            endDateInput.value = normEnd;
+            endDateValue = normEnd;
+        }
+
+        const startCheck = validateYYMMDDInput(startDateValue);
+        if (!startCheck.valid) {
+            alert(startCheck.message || '시작일을 yy/mm/dd 형식으로 입력해 주세요.');
+            return;
+        }
+        const endCheck = validateYYMMDDInput(endDateValue);
+        if (!endCheck.valid) {
+            alert(endCheck.message || '종료일을 yy/mm/dd 형식으로 입력해 주세요.');
             return;
         }
 
@@ -4630,6 +5103,26 @@ function updateStatsByDateRange() {
     // 차트 업데이트: 필터링된 데이터 기반으로 렌더링
     if (typeof renderMonthlyAverageChart === 'function') {
         renderMonthlyAverageChart(filteredData);
+    }
+    if (typeof renderNumberFrequencyChart === 'function') {
+        renderNumberFrequencyChart(filteredData);
+    }
+    if (typeof renderWinFrequencyChart === 'function') {
+        renderWinFrequencyChart(filteredData);
+    }
+
+    // 우측 패널 합계값에 마지막(최신) 회차 당첨번호 합계 반영 (차트 렌더링 이후)
+    if (filteredData.length > 0) {
+        const lastRound = filteredData[0];
+        const nums = (lastRound && Array.isArray(lastRound.numbers)) ? lastRound.numbers : [];
+        const lastSum = nums.reduce((a, b) => a + (Number(b) || 0), 0);
+        const sumValEl = document.getElementById('resultSumValue');
+        if (sumValEl && lastSum > 0) {
+            sumValEl.value = lastSum;
+            if (!AppState.resultFilters) AppState.resultFilters = {};
+            AppState.resultFilters.sumValue = lastSum;
+            renderViewNumbersList(filteredData);
+        }
     }
 }
 
@@ -4718,44 +5211,25 @@ function renderStats(lotto645Data) {
     renderNumberGrid();
 }
 
-/**
- * 합계 평균 표시 업데이트 (당첨공 패널 헤더에 표시)
- */
-/**
- * 합계 평균 표시 업데이트 (당첨공 패널 헤더에 표시)
- * [ 0000회 ~ 0000회   [  0000회  기간평균: 000 ]
- */
 function updateAverageSumDisplay(data) {
-    const statsHeaderDisplay = document.getElementById('statsHeaderDisplay');
-    if (!statsHeaderDisplay) return;
-
-    statsHeaderDisplay.style.color = 'var(--color-primary)';
-    statsHeaderDisplay.style.fontWeight = 'bold';
+    const el = document.getElementById('resultRoundRange');
+    if (!el) return;
 
     if (!data || data.length === 0) {
-        statsHeaderDisplay.textContent = '[ 0000회 ~ 0000회   [  0000회  기간평균: 000 ]';
+        el.textContent = '[ 0000 ~ 0000, 000회 ]';
         return;
     }
 
     const rounds = data.map(r => Number(r.round)).filter(r => !isNaN(r));
     const startRound = Math.min(...rounds);
     const endRound = Math.max(...rounds);
-
-    const sums = data.map(round => {
-        if (!round.numbers || round.numbers.length === 0) return 0;
-        return round.numbers.reduce((acc, num) => acc + (num || 0), 0);
-    }).filter(s => s > 0);
-
-    const average = sums.length > 0 ? Math.round(sums.reduce((acc, sum) => acc + sum, 0) / sums.length) : 0;
     const count = data.length;
 
     const startStr = startRound.toString().padStart(4, '0');
     const endStr = endRound.toString().padStart(4, '0');
-    const countStr = count.toString().padStart(4, '0');
-    const avgStr = average.toString().padStart(3, '0');
+    const countStr = count.toString().padStart(3, '0');
 
-    // 요청하신 포맷: [ 0001회 ~ 0100회  (0100회)  기간평균: 138 ]
-    statsHeaderDisplay.textContent = `[ ${startStr}회 ~ ${endStr}회  (${countStr}회)  기간평균: ${avgStr} ]`;
+    el.textContent = `[ ${startStr} ~ ${endStr}, ${countStr}회 ]`;
 }
 
 /**
@@ -4768,20 +5242,22 @@ function createRoundLineElement(round) {
     roundLine.style.alignItems = 'center';
     roundLine.style.justifyContent = 'space-between';
     roundLine.style.gap = '8px';
-    roundLine.style.marginBottom = '4px';
+    roundLine.style.marginBottom = '0';
     roundLine.style.padding = '0 8px';
-    roundLine.style.height = '30px';
-    roundLine.style.minHeight = '30px';
+    roundLine.style.height = '24px';
+    roundLine.style.minHeight = '24px';
     roundLine.style.boxSizing = 'border-box';
     const roundInfo = document.createElement('span');
     roundInfo.style.fontWeight = '400';
     roundInfo.style.fontSize = '0.85rem';
     roundInfo.style.minWidth = '100px';
-    roundInfo.style.color = '#000000';
+    roundInfo.style.color = SHAREHARMONY_PALETTE.textPrimary;
     roundInfo.style.opacity = '1';
     roundInfo.style.display = 'flex';
     roundInfo.style.alignItems = 'center';
     roundInfo.style.gap = '4px';
+    roundInfo.style.flexShrink = '0';
+    roundInfo.style.whiteSpace = 'nowrap';
     const roundNumber = document.createElement('span');
     roundNumber.textContent = String(round.round).padStart(4, '0');
     const roundUnit = document.createElement('span');
@@ -4820,27 +5296,43 @@ function createRoundLineElement(round) {
     sumDisplay.className = 'round-sum-display';
     sumDisplay.textContent = `[ ${sum.toString().padStart(3, '0')} ] `;
     sumDisplay.style.fontSize = '0.85rem';
-    sumDisplay.style.color = '#ff0000';
+    sumDisplay.style.color = SHAREHARMONY_PALETTE.error;
     sumDisplay.style.fontWeight = 'bold';
     const dateSpan = document.createElement('span');
     dateSpan.className = 'round-date-display';
     dateSpan.textContent = formattedDate;
+    const minMaxSpan = document.createElement('span');
+    minMaxSpan.className = 'round-minmax-display';
+    minMaxSpan.style.fontSize = '0.78rem';
+    minMaxSpan.style.color = SHAREHARMONY_PALETTE.textPrimary;
+    minMaxSpan.style.fontFamily = "'Courier New', Courier, monospace";
+    minMaxSpan.style.whiteSpace = 'nowrap';
+    const rv = AppState.chartRoundValuesMap && AppState.chartRoundValuesMap[round.round];
+    if (rv) {
+        const mn = rv.min != null ? (rv.min).toFixed(1) : '-';
+        const av = rv.avg != null ? (rv.avg).toFixed(1) : '-';
+        const mx = rv.max != null ? (rv.max).toFixed(1) : '-';
+        minMaxSpan.textContent = `(${mn}/${av}/${mx})`;
+    }
+
     roundInfo.appendChild(roundNumber);
     roundInfo.appendChild(roundUnit);
     roundInfo.appendChild(sumDisplay);
+    roundInfo.appendChild(minMaxSpan);
     roundInfo.appendChild(dateSpan);
     const numbersContainer = document.createElement('div');
     numbersContainer.style.display = 'flex';
     numbersContainer.style.alignItems = 'center';
-    numbersContainer.style.gap = '16px';
+    numbersContainer.style.gap = '2px';
     numbersContainer.style.justifyContent = 'flex-end';
-    numbersContainer.style.flexWrap = 'wrap';
+    numbersContainer.style.flexWrap = 'nowrap';
+    numbersContainer.style.flexShrink = '0';
     numbersContainer.style.marginLeft = 'auto';
     const nums = (round.numbers || []).map(n => parseInt(n, 10)).filter(n => !isNaN(n)).sort((a, b) => a - b);
     const runs = getConsecutiveRuns(nums, 2);
     const seqSet = new Set(runs.flat());
     round.numbers.forEach(num => {
-        const ball = createStatBall(num, 24, '0.9rem');
+        const ball = createStatBall(num, 22, '0.8rem');
         if (seqSet.has(parseInt(num, 10))) {
             ball.classList.add('ball-seq3');
         }
@@ -4849,7 +5341,7 @@ function createRoundLineElement(round) {
     if (round.bonus && round.bonus > 0) {
         const plusSign = createPlusSign('color: #000000; font-weight: bold; margin: 0 4px; font-size: 1rem;');
         numbersContainer.appendChild(plusSign);
-        const bonusBall = createStatBall(round.bonus, 24, '0.9rem');
+        const bonusBall = createStatBall(round.bonus, 22, '0.8rem');
         numbersContainer.appendChild(bonusBall);
     }
     roundLine.appendChild(roundInfo);
@@ -4961,38 +5453,34 @@ async function loadAndShowLottoRound(roundNo, targetElement) {
             .filter(n => n != null);
         const bnus = data.bnusNo;
 
-        // 공 색상 클래스 (getBallClass가 있으면 사용)
-        const getClass = (typeof getBallClass === 'function') ? getBallClass : (() => '');
-
-        const ballsHtml = nums.map(n =>
-            `<span class="latest-draw-ball stat-ball ${getClass(n)}">${n}</span>`
-        ).join(' ');
-
-        let bonusHtml = '-';
-        if (bnus != null) {
-            bonusHtml = `<span style="margin:0 4px;">+</span> <span class="latest-draw-ball stat-ball ${getClass(bnus)}">${bnus}</span>`;
-        } else {
-            // API가 보너스 번호를 못 가져온 경우, viewNumbersList에서 해당 회차 로컬 데이터 찾기 시도
-            // (이 부분은 필수는 아니지만 UX 향상용)
+        function getBallBg(n) {
+            if (n <= 10) return 'var(--lotto-yellow)';
+            if (n <= 20) return 'var(--lotto-blue)';
+            if (n <= 30) return 'var(--lotto-red)';
+            if (n <= 40) return 'var(--lotto-gray)';
+            return 'var(--lotto-green)';
         }
+        const ballStyle = 'display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;color:#333;font-weight:bold;font-size:0.8rem;';
+        const makeBall = (n) => `<span style="${ballStyle}background:${getBallBg(n)};">${n}</span>`;
+
+        const numbersRowHtml = nums.map(makeBall).join('')
+            + (bnus != null ? `<span style="margin:0 4px;font-weight:bold;color:#999;">+</span>${makeBall(bnus)}` : '');
 
         const fmtAmt = (v) => (v && v !== '(없음)') ? v + '원' : (v || '(없음)');
-        const firstWinamntFmt = data.firstWinamntFmt ? fmtAmt(data.firstWinamntFmt) : '(없음)';
-        const firstPrzwnerCoFmt = data.firstPrzwnerCoFmt ? (data.firstPrzwnerCoFmt + '명') : '(없음)';
-        const firstAccumamntFmt = data.firstAccumamntFmt ? fmtAmt(data.firstAccumamntFmt) : '(없음)';
-        const totSellamntFmt = data.totSellamntFmt ? fmtAmt(data.totSellamntFmt) : '(없음)';
+
+        const thStyle = 'text-align:left;padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;font-size:0.82rem;';
+        const tdStyle = 'padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-size:0.82rem;';
 
         let tableHtml = `
             <table class="lotto-round-detail-table" style="width:100%; border-collapse: collapse; margin-top:10px;">
                 <tbody>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">당첨회차</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${drwNo}회</td></tr>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">추첨일</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${dateStr}</td></tr>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">당첨번호</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${ballsHtml}</td></tr>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">보너스번호</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${bnus != null ? `<span class="latest-draw-ball stat-ball ${getClass(bnus)}">${bnus}</span>` : '-'}</td></tr>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">1등 당첨금액</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${data.firstWinamntFmt || '(없음)'}</td></tr>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">1등 당첨자 수</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${data.firstPrzwnerCoFmt || '(없음)'}</td></tr>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">1등 총당첨금액</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${data.firstAccumamntFmt || '(없음)'}</td></tr>
-                    <tr><th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">전체 당첨상금 총액</th><td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${data.totSellamntFmt || '(없음)'}</td></tr>
+                    <tr><th style="${thStyle}">당첨회차</th><td style="${tdStyle}">${drwNo}회</td></tr>
+                    <tr><th style="${thStyle}">추첨일</th><td style="${tdStyle}">${dateStr}</td></tr>
+                    <tr><th style="${thStyle}vertical-align:middle;">당첨번호</th><td style="${tdStyle}"><div style="display:flex;align-items:center;justify-content:flex-end;gap:3px;flex-wrap:nowrap;">${numbersRowHtml}</div></td></tr>
+                    <tr><th style="${thStyle}">1등 당첨금액</th><td style="${tdStyle}">${data.firstWinamntFmt || '(없음)'}</td></tr>
+                    <tr><th style="${thStyle}">1등 당첨자 수</th><td style="${tdStyle}">${data.firstPrzwnerCoFmt || '(없음)'}</td></tr>
+                    <tr><th style="${thStyle}">1등 총당첨금액</th><td style="${tdStyle}">${data.firstAccumamntFmt || '(없음)'}</td></tr>
+                    <tr><th style="${thStyle}">전체 판매금액</th><td style="${tdStyle}">${data.totSellamntFmt || '(없음)'}</td></tr>
                 </tbody>
             </table>
         `;
@@ -5021,7 +5509,6 @@ function renderViewNumbersList(baseData) {
     const viewNumbersList = document.getElementById('viewNumbersList');
     if (!viewNumbersList) return;
 
-    // data가 있으면(필터링된 데이터) 그대로 사용, 없으면 전체 데이터 사용
     let listData = baseData || AppState.currentStatsRounds || AppState.allLotto645Data;
 
     if (!listData || listData.length === 0) {
@@ -5034,11 +5521,28 @@ function renderViewNumbersList(baseData) {
 
     const INITIAL_DISPLAY_COUNT = 50;
 
-    // 정렬 로직
-    let sortedRounds;
-    sortedRounds = [...listData].sort((a, b) => b.round - a.round);
+    // 합계값 필터: 입력된 합계와 동일한 회차만 표시
+    const sumFilter = (AppState.resultFilters && AppState.resultFilters.sumValue) || null;
+    let filtered = listData;
+    if (sumFilter != null) {
+        filtered = filtered.filter(r => getRoundSum(r) === sumFilter);
+    }
 
-    AppState.currentViewRounds = sortedRounds; // AI 분석 참고용으로 저장
+    const sortOrder = (AppState.resultFilters && AppState.resultFilters.sortOrder) || 'desc';
+    let sortedRounds;
+    if (sortOrder === 'asc') {
+        sortedRounds = [...filtered].sort((a, b) => a.round - b.round);
+    } else {
+        sortedRounds = [...filtered].sort((a, b) => b.round - a.round);
+    }
+
+    AppState.currentViewRounds = sortedRounds;
+
+    if (sortedRounds.length === 0) {
+        viewNumbersList.innerHTML = '<p>필터 조건에 해당하는 회차가 없습니다.</p>';
+        updateAverageSumDisplay(listData);
+        return;
+    }
 
     // 초기 렌더링 (최대 50개)
     const initialBatch = sortedRounds.slice(0, INITIAL_DISPLAY_COUNT);
@@ -5094,27 +5598,123 @@ function renderViewNumbersList(baseData) {
     });
 })();
 
-// 하단 영역 토글 및 드래그 제어
+function hideAllBottomPanels() {
+    ['bottomArea', 'bottomAreaWin', 'bottomAreaNumber'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('visible');
+    });
+    ['navStatsGraph', 'navWinStats', 'navNumberStats'].forEach(id => updateNavActive(id, false));
+}
+
+// 합계통계(하단 영역) 표시/숨김
+function toggleStatsGraph() {
+    const panel = document.getElementById('bottomArea');
+    if (!panel) return;
+    const isHidden = window.getComputedStyle(panel).display === 'none';
+    hideAllBottomPanels();
+    if (isHidden) {
+        panel.classList.add('visible');
+        updateNavActive('navStatsGraph', true);
+        if (AppState.allLotto645Data && typeof renderMonthlyAverageChart === 'function') {
+            renderMonthlyAverageChart(AppState.allLotto645Data);
+        }
+    }
+}
+
+// 출현통계(하단 영역) 표시/숨김 - 1~45 당첨횟수
+function toggleWinStats() {
+    const panel = document.getElementById('bottomAreaWin');
+    if (!panel) return;
+    const isHidden = window.getComputedStyle(panel).display === 'none';
+    hideAllBottomPanels();
+    if (isHidden) {
+        panel.classList.add('visible');
+        updateNavActive('navWinStats', true);
+        const data = AppState.currentStatsRounds || AppState.allLotto645Data;
+        if (data && typeof renderWinFrequencyChart === 'function') {
+            renderWinFrequencyChart(data);
+        }
+    }
+}
+
+// 번호통계(하단 영역) 표시/숨김
+function toggleNumberStats() {
+    const panel = document.getElementById('bottomAreaNumber');
+    if (!panel) return;
+    const isHidden = window.getComputedStyle(panel).display === 'none';
+    hideAllBottomPanels();
+    if (isHidden) {
+        panel.classList.add('visible');
+        updateNavActive('navNumberStats', true);
+        const data = AppState.currentStatsRounds || AppState.allLotto645Data;
+        if (data && typeof renderNumberFrequencyChart === 'function') {
+            renderNumberFrequencyChart(data);
+        }
+    }
+}
+
+function updateNavActive(id, active) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (active) {
+        el.classList.add('nav-active');
+        el.style.color = 'white';
+        el.style.borderBottom = '2px solid var(--color-accent)';
+        el.style.paddingBottom = '4px';
+    } else {
+        el.classList.remove('nav-active');
+        el.style.color = 'rgba(255,255,255,0.7)';
+        el.style.borderBottom = 'none';
+        el.style.paddingBottom = '0';
+    }
+}
+
 function setupFooterToggle() {
     const footer = document.getElementById('mainFooter');
     const bottomArea = document.getElementById('bottomArea');
     const dragHandle = document.getElementById('bottomDragHandle');
+    const navStatsGraph = document.getElementById('navStatsGraph');
+    const navWinStats = document.getElementById('navWinStats');
+    const navNumberStats = document.getElementById('navNumberStats');
+    const navLuckyNumbers = document.getElementById('navLuckyNumbers');
     if (!footer || !bottomArea) return;
 
-    // 1. 토글 기능
-    footer.addEventListener('click', () => {
-        const isHidden = bottomArea.style.display === 'none';
-        if (isHidden) {
-            bottomArea.style.display = 'block';
-            if (AppState.allLotto645Data && typeof renderMonthlyAverageChart === 'function') {
-                renderMonthlyAverageChart(AppState.allLotto645Data);
-            }
-        } else {
-            bottomArea.style.display = 'none';
-        }
+    const panels = [
+        { nav: navStatsGraph, toggle: toggleStatsGraph },
+        { nav: navWinStats, toggle: toggleWinStats },
+        { nav: navNumberStats, toggle: toggleNumberStats }
+    ];
+    panels.forEach(({ nav, toggle }) => {
+        if (nav) nav.addEventListener('click', (e) => { e.preventDefault(); toggle(); });
     });
 
-    // 2. 상하 드래그 기능
+    if (navLuckyNumbers) {
+        navLuckyNumbers.addEventListener('click', (e) => {
+            e.preventDefault();
+            const gameBox = document.getElementById('gameBox');
+            if (gameBox) gameBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (typeof generateGoldenAiGames === 'function') generateGoldenAiGames();
+        });
+    }
+
+    const allPanelIds = ['bottomArea', 'bottomAreaWin', 'bottomAreaNumber'];
+    const allNavEls = [navStatsGraph, navWinStats, navNumberStats].filter(Boolean);
+
+    document.addEventListener('click', (e) => {
+        if (allNavEls.some(n => n.contains(e.target))) return;
+        allPanelIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.classList.contains('visible') && !el.contains(e.target)) {
+                hideAllBottomPanels();
+            }
+        });
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideAllBottomPanels();
+    });
+
+    // 3. 하단 영역(출현통계) 상하 드래그로 위치 조절
     if (dragHandle) {
         let isDragging = false;
         let startY, startBottom;
@@ -5158,14 +5758,247 @@ function setupFooterToggle() {
     }
 }
 
-// 모든 리소스가 로드된 후 초기화 실행
+// 전체 화면 진입 시도 (이 페이지는 전체화면으로 시작)
+function tryFullscreen() {
+    const el = document.documentElement;
+    if (!el.requestFullscreen) return;
+    if (document.fullscreenElement) return;
+    try {
+        el.requestFullscreen().catch(function () {});
+    } catch (e) {}
+}
+
+function setupResultFilterListeners() {
+    if (!AppState.resultFilters) {
+        AppState.resultFilters = {};
+    }
+    AppState.resultFilters = Object.assign(
+        { sumValue: null, sortOrder: 'desc' },
+        AppState.resultFilters
+    );
+    var sumVal = document.getElementById('resultSumValue');
+    var sortOrder = document.getElementById('resultSortOrder');
+
+    if (sumVal) sumVal.addEventListener('change', function () {
+        var v = parseInt(this.value, 10);
+        AppState.resultFilters.sumValue = isNaN(v) ? null : v;
+        if (AppState.currentViewNumbersBaseData) {
+            renderViewNumbersList(AppState.currentViewNumbersBaseData);
+        }
+    });
+    if (sortOrder) sortOrder.addEventListener('change', function () {
+        AppState.resultFilters.sortOrder = this.value;
+        if (AppState.currentViewNumbersBaseData) {
+            renderViewNumbersList(AppState.currentViewNumbersBaseData);
+        }
+    });
+
+}
+
+function updateResultFilterAvg() {
+    var sumValEl = document.getElementById('resultSumValue');
+
+    var vals = AppState.chartEndRoundValues;
+    if (!vals) return;
+
+    if (sumValEl && vals.avg != null) {
+        sumValEl.value = Math.round(vals.avg);
+        AppState.resultFilters.sumValue = parseInt(sumValEl.value, 10);
+    }
+
+    var listData = AppState.currentViewNumbersBaseData || AppState.currentStatsRounds || AppState.allLotto645Data;
+    updateAverageSumDisplay(listData);
+    extractAndApplyFilters(listData);
+}
+
+function showNavBubble(anchor, message, duration = 3000) {
+    const existing = document.getElementById('navBubbleTooltip');
+    if (existing) existing.remove();
+
+    const bubble = document.createElement('div');
+    bubble.id = 'navBubbleTooltip';
+    bubble.textContent = message;
+    Object.assign(bubble.style, {
+        position: 'absolute',
+        background: SHAREHARMONY_PALETTE.primaryNavy,
+        color: '#fff',
+        padding: '6px 12px',
+        borderRadius: '6px',
+        fontSize: '0.78rem',
+        fontWeight: '600',
+        whiteSpace: 'nowrap',
+        zIndex: '9999',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        opacity: '0',
+        transition: 'opacity 0.2s ease',
+        pointerEvents: 'none'
+    });
+    document.body.appendChild(bubble);
+
+    const rect = anchor.getBoundingClientRect();
+    bubble.style.left = `${rect.left + rect.width / 2 - bubble.offsetWidth / 2}px`;
+    bubble.style.top = `${rect.bottom + 6 + window.scrollY}px`;
+    bubble.style.opacity = '1';
+
+    setTimeout(() => {
+        bubble.style.opacity = '0';
+        setTimeout(() => bubble.remove(), 200);
+    }, duration);
+}
+
+async function fetchLatestWinningNumbers() {
+    const navBtn = document.getElementById('navFetchLatest');
+    if (navBtn) {
+        navBtn.style.pointerEvents = 'none';
+        navBtn.textContent = '조회중...';
+    }
+
+    try {
+        const base = getApiBaseUrl();
+
+        const latestRes = await fetch(base + '/api/lotto-latest', { cache: 'no-store' });
+        const latestData = await latestRes.json().catch(() => ({}));
+        if (latestData.returnValue !== 'success' || latestData.drwNo == null) {
+            alert('동행복권 최신 회차 정보를 가져오지 못했습니다.');
+            return;
+        }
+
+        const apiLatestRound = latestData.drwNo;
+        const localEndRound = AppState.endRound || 0;
+
+        if (apiLatestRound <= localEndRound) {
+            showNavBubble(navBtn, `이미 최신 상태입니다. (${localEndRound}회)`);
+            return;
+        }
+
+        const missingCount = apiLatestRound - localEndRound;
+        if (navBtn) navBtn.textContent = `${missingCount}회 취득중...`;
+
+        if (missingCount <= 100) {
+            const missingRounds = [];
+            for (let r = localEndRound + 1; r <= apiLatestRound; r++) missingRounds.push(r);
+            await fetch(base + '/api/fetch-missing-rounds?rounds=' + missingRounds.join(','), { cache: 'no-store' });
+        }
+
+        const syncRes = await fetch(base + '/api/sync-lotto645', { method: 'POST', cache: 'no-store' });
+        const syncData = await syncRes.json().catch(() => ({}));
+
+        if (syncData.returnValue === 'fail' && syncData.error) {
+            alert('회차 추가 실패: ' + syncData.error + '\nExcel에서 Lotto645.xlsx를 닫고 다시 시도하세요.');
+            return;
+        }
+
+        const loadFunc = (typeof window !== 'undefined' && window.loadLotto645Data)
+            ? window.loadLotto645Data
+            : (typeof loadLotto645Data !== 'undefined' ? loadLotto645Data : null);
+
+        if (!loadFunc) {
+            alert('데이터 로드 함수를 찾을 수 없습니다. 페이지를 새로고침하세요.');
+            return;
+        }
+
+        const newData = await loadFunc();
+        if (newData && newData.length > 0) {
+            await initializeStats(newData);
+
+            AppState.latestRoundApi = apiLatestRound;
+            AppState.latestRoundDateApi = latestData.drwNoDate || '';
+
+            const endInput = document.getElementById('endDate');
+            if (endInput && latestData.drwNoDate) {
+                const apiDateObj = parseDate(String(latestData.drwNoDate).trim());
+                if (apiDateObj instanceof Date && !isNaN(apiDateObj.getTime())) {
+                    endInput.value = formatDateYYMMDD(apiDateObj);
+                }
+            }
+
+            if (typeof updateRoundRangeDisplay === 'function') updateRoundRangeDisplay();
+            if (typeof renderStats === 'function') renderStats(newData);
+
+            // 중앙 패널 게임 초기화: 공 비우고 합계 000으로 리셋
+            AppState.setSelectedBalls = Array.from({ length: 5 }, () => []);
+            for (let i = 1; i <= 5; i++) {
+                const ballsContainer = document.getElementById(`gameBalls${i}`);
+                if (ballsContainer) ballsContainer.innerHTML = '';
+                const modeBtn = document.getElementById(`modeBtn${i}`);
+                if (modeBtn) {
+                    modeBtn.dataset.mode = 'manual';
+                    modeBtn.textContent = '수동';
+                }
+                const cb = document.getElementById(`gameCheckbox${i}`);
+                if (cb) cb.checked = false;
+                updateGameSum(i, []);
+            }
+
+            // 우측 패널 합계값에 최신 당첨번호 합계 반영
+            const latestNums = [1,2,3,4,5,6].map(n => Number(latestData[`drwtNo${n}`]) || 0);
+            const latestSum = latestNums.reduce((a, b) => a + b, 0);
+            const sumValEl = document.getElementById('resultSumValue');
+            if (sumValEl && latestSum > 0) {
+                sumValEl.value = latestSum;
+                AppState.resultFilters.sumValue = latestSum;
+                if (AppState.currentViewNumbersBaseData) {
+                    renderViewNumbersList(AppState.currentViewNumbersBaseData);
+                }
+            }
+
+            const added = newData.length - (AppState.previousDataCount || 0);
+            alert(`${localEndRound + 1}회 ~ ${apiLatestRound}회 (${missingCount}회차) 추가 완료!\n총 ${newData.length}회차 데이터`);
+        } else {
+            alert('데이터를 다시 불러오지 못했습니다. 페이지를 새로고침하세요.');
+        }
+    } catch (e) {
+        console.error('[최근당첨번호] 오류:', e);
+        alert('최근당첨번호 조회 중 오류가 발생했습니다: ' + (e.message || String(e)));
+    } finally {
+        if (navBtn) {
+            navBtn.style.pointerEvents = '';
+            navBtn.textContent = '최근당첨번호';
+        }
+    }
+}
+
+function setupPanelLabelToggle() {
+    const map = {
+        stats: '.panel-box-stats',
+        game: '.panel-box-game',
+        win: '.panel-box-win'
+    };
+    document.querySelectorAll('.panel-toggle-btn').forEach(btn => {
+        btn.classList.add('active');
+        btn.addEventListener('click', () => {
+            const panelBox = document.querySelector(map[btn.dataset.panel]);
+            if (!panelBox) return;
+            panelBox.classList.toggle('collapsed');
+            btn.classList.toggle('active', !panelBox.classList.contains('collapsed'));
+        });
+    });
+}
+
 window.addEventListener('load', () => {
     setTimeout(function () {
         try {
             initializeApp();
             initAIChat();
             setupRangeTypeSelectors();
-            setupFooterToggle(); // 토글 기능 초기화
+            setupFooterToggle();
+            setupPanelLabelToggle();
+            setupResultFilterListeners();
+            const navFetchBtn = document.getElementById('navFetchLatest');
+            setupScrollToTopButton();
+            if (navFetchBtn) {
+                navFetchBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    fetchLatestWinningNumbers();
+                });
+            }
+            // 전체화면으로 시작 시도 (브라우저 정책상 로드 직후는 막힐 수 있음)
+            tryFullscreen();
+            // 첫 클릭 시 전체화면 재시도 (제스처 필요 시 대비)
+            document.body.addEventListener('click', function onceFullscreen() {
+                tryFullscreen();
+                document.body.removeEventListener('click', onceFullscreen);
+            }, { once: true });
         } catch (e) {
             console.error('[로또] initializeApp 예외:', e);
         }
@@ -5384,8 +6217,8 @@ function renderMonthlyAverageChart(currentData) {
     // 전체 범위를 알기 위해 AppState.allLotto645Data가 필수입니다.
     if (!ctx || !AppState.allLotto645Data || AppState.allLotto645Data.length === 0) return;
 
-    // 1. 전체 데이터 가공: 회차별 정렬 (1회 -> 최종회)
-    const fullData = [...AppState.allLotto645Data].sort((a, b) => a.round - b.round);
+    // 1. 전체 데이터 가공: 최근회차 -> 과거회차 순 (좌측=최근, 우측=과거)
+    const fullData = [...AppState.allLotto645Data].sort((a, b) => b.round - a.round);
 
     // 현재 표시해야 할 데이터 (필터링된 데이터)
     const displayData = currentData || AppState.currentStatsRounds || AppState.allLotto645Data;
@@ -5399,14 +6232,77 @@ function renderMonthlyAverageChart(currentData) {
         return null; // 선택되지 않은 회차는 그리지 않음
     });
 
-    // 2. 현재 선택된 데이터 기반 평균 계산
-    const validSums = roundSums.filter(s => s !== null);
-    const overallAverage = validSums.length > 0
-        ? parseFloat((validSums.reduce((acc, sum) => acc + sum, 0) / validSums.length).toFixed(1))
-        : 0;
+    // 2. 회차별 누적 평균: 1회 ~ 당 회차까지의 평균 (파란 점선·툴팁용)
+    const cumulativeAverages = [];
+    const n = fullData.length;
+    for (let i = 0; i < n; i++) {
+        const R = fullData[i].round;
+        const startIdx = Math.max(0, n - R);
+        let sum = 0;
+        let count = 0;
+        for (let j = startIdx; j < n; j++) {
+            if (roundSums[j] !== null) {
+                sum += roundSums[j];
+                count += 1;
+            }
+        }
+        cumulativeAverages.push(count > 0 ? parseFloat((sum / count).toFixed(1)) : null);
+    }
+
+    // 2-1. Max(파란 평균보다 큰 회차들의 평균) / Min(파란 평균보다 작은 회차들의 평균)
+    const maxLine = [];
+    const minLine = [];
+    for (let i = 0; i < n; i++) {
+        const R = fullData[i].round;
+        const startIdx = Math.max(0, n - R);
+        const blueVal = cumulativeAverages[i];
+        let aboveSum = 0, aboveCount = 0, belowSum = 0, belowCount = 0;
+        for (let j = startIdx; j < n; j++) {
+            if (roundSums[j] === null) continue;
+            if (roundSums[j] > blueVal) {
+                aboveSum += roundSums[j];
+                aboveCount += 1;
+            } else if (roundSums[j] < blueVal) {
+                belowSum += roundSums[j];
+                belowCount += 1;
+            }
+        }
+        maxLine.push(aboveCount > 0 ? parseFloat((aboveSum / aboveCount).toFixed(1)) : null);
+        minLine.push(belowCount > 0 ? parseFloat((belowSum / belowCount).toFixed(1)) : null);
+    }
+
+    // 전체 회차별 min/avg/max 맵 저장
+    const chartRoundMap = {};
+    for (let i = 0; i < n; i++) {
+        chartRoundMap[fullData[i].round] = {
+            min: minLine[i],
+            avg: cumulativeAverages[i],
+            max: maxLine[i]
+        };
+    }
+    AppState.chartRoundValuesMap = chartRoundMap;
+
+    // 종료회차(endRound)에 해당하는 그래프 값을 AppState에 저장
+    const endRound = AppState.endRound || (fullData.length > 0 ? fullData[0].round : 0);
+    const endIdx = fullData.findIndex(r => r.round === endRound);
+    if (endIdx >= 0) {
+        AppState.chartEndRoundValues = {
+            min: minLine[endIdx],
+            avg: cumulativeAverages[endIdx],
+            max: maxLine[endIdx]
+        };
+    } else if (fullData.length > 0) {
+        AppState.chartEndRoundValues = {
+            min: minLine[0],
+            avg: cumulativeAverages[0],
+            max: maxLine[0]
+        };
+    }
+    updateResultFilterAvg();
 
     // 3. 차트 너비 계산 및 스크롤바 설정을 위한 wrapper 처리
     const chartWrapper = document.getElementById('chartWrapper');
+    const chartYAxisFixed = document.getElementById('chartYAxisFixed');
     const bottomUnifiedContent = document.getElementById('bottomUnifiedContent');
     if (chartWrapper) {
         // 회차당 고정 6px 유지
@@ -5418,25 +6314,32 @@ function renderMonthlyAverageChart(currentData) {
         ctx.width = calculatedWidth;
         ctx.height = chartWrapper.offsetHeight;
 
-        // 필터링된 데이터가 있다면 해당 위치로 스크롤
+        // 좌측=최근이므로 기본은 스크롤 0(최근이 보이도록)
         setTimeout(() => {
-            if (bottomUnifiedContent && displayData.length > 0) {
-                const firstRound = Math.min(...displayData.map(r => r.round));
-                const firstIdx = fullData.findIndex(r => r.round === firstRound);
-                if (firstIdx !== -1) {
-                    // 선택된 데이터의 시작 지점으로 스크롤 (약간의 여유를 위해 앞으로 조금 당김)
-                    bottomUnifiedContent.scrollLeft = Math.max(0, (firstIdx * fixedBarWidth) - 20);
-                }
-            } else if (bottomUnifiedContent) {
-                // 전체 데이터일 경우 끝(최신회차)으로 스크롤
-                bottomUnifiedContent.scrollLeft = bottomUnifiedContent.scrollWidth;
+            if (bottomUnifiedContent) {
+                bottomUnifiedContent.scrollLeft = 0;
             }
         }, 100);
     }
 
-    // 4. Y축 범위 (이론적 최소 21 ~ 최대 255)
+    // 4. Y축 고정 (이론적 최소 21 ~ 최대 255, 로또 6개 번호 합 범위)
     const yMin = 21;
     const yMax = 255;
+    const yStep = 10;
+
+    // 고정 Y축 눈금 렌더 (스크롤 시 사라지지 않음, 차트와 동일 21~250 step 10)
+    if (chartYAxisFixed) {
+        chartYAxisFixed.innerHTML = '';
+        const yTicks = [];
+        for (let v = 250; v > yMin; v -= yStep) yTicks.push(v);
+        yTicks.push(yMin);
+        yTicks.forEach(function (v) {
+            const span = document.createElement('span');
+            span.textContent = String(v);
+            span.setAttribute('role', 'presentation');
+            chartYAxisFixed.appendChild(span);
+        });
+    }
 
     // 4. 기존 차트가 있으면 파괴
     if (window.lottoAverageChart) {
@@ -5462,15 +6365,37 @@ function renderMonthlyAverageChart(currentData) {
                     zIndex: 1
                 },
                 {
-                    label: `선택 평균 (${overallAverage})`,
+                    label: '선택 평균 (1회~당 회차)',
                     type: 'line',
-                    data: new Array(labels.length).fill(overallAverage),
-                    borderColor: '#ff0000',
+                    data: cumulativeAverages,
+                    borderColor: '#69C8F2',
                     borderWidth: 2,
                     borderDash: [5, 5],
                     pointRadius: 0,
                     fill: false,
                     zIndex: 2
+                },
+                {
+                    label: 'Max (평균보다 큰 회차 평균)',
+                    type: 'line',
+                    data: maxLine,
+                    borderColor: SHAREHARMONY_PALETTE.error,
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    fill: false,
+                    zIndex: 3
+                },
+                {
+                    label: 'Min (평균보다 작은 회차 평균)',
+                    type: 'line',
+                    data: minLine,
+                    borderColor: '#000000',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    fill: false,
+                    zIndex: 3
                 }
             ]
         },
@@ -5486,12 +6411,33 @@ function renderMonthlyAverageChart(currentData) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
-                        label: function (context) {
-                            if (context.parsed.y === null) return null;
-                            if (context.datasetIndex === 0) {
-                                return `합계: ${context.parsed.y}`;
+                        label: function () { return null; },
+                        afterBody: function (context) {
+                            const idx = (context[0] && context[0].dataIndex != null) ? context[0].dataIndex : -1;
+                            const tot = idx >= 0 && roundSums[idx] != null ? roundSums[idx] : '-';
+                            const maxVal = idx >= 0 && maxLine[idx] != null ? maxLine[idx] : '-';
+                            const avrVal = idx >= 0 && cumulativeAverages[idx] != null ? cumulativeAverages[idx] : '-';
+                            const minVal = idx >= 0 && minLine[idx] != null ? minLine[idx] : '-';
+
+                            const label = (context[0] && context[0].label) ? context[0].label : '';
+                            const roundNum = parseInt(String(label).replace(/회$/, ''), 10);
+
+                            const lines = [];
+                            lines.push('TOT: ' + tot);
+                            lines.push('Max: ' + maxVal);
+                            lines.push('Avr.: ' + avrVal + '(1회~' + (isNaN(roundNum) ? '?' : roundNum) + '회)');
+                            lines.push('Min: ' + minVal);
+
+                            if (!isNaN(roundNum) && AppState.allLotto645Data) {
+                                const roundData = AppState.allLotto645Data.find(function (r) { return r.round === roundNum; });
+                                if (roundData) {
+                                    const nums = (roundData.numbers || []).slice(0, 6).map(function (n) { return Number(n); }).filter(function (n) { return !isNaN(n); }).sort(function (a, b) { return a - b; });
+                                    const bonus = roundData.bonus != null ? String(roundData.bonus).trim() : '';
+                                    const bonusStr = bonus ? ' + ' + bonus : '';
+                                    lines.push('Number: ' + nums.join(', ') + bonusStr);
+                                }
                             }
-                            return `선택 평균: ${context.parsed.y}`;
+                            return lines;
                         }
                     }
                 }
@@ -5509,17 +6455,278 @@ function renderMonthlyAverageChart(currentData) {
                         autoSkip: false,
                         maxRotation: 0,
                         font: { size: 10 },
-                        color: '#666'
+                        color: SHAREHARMONY_PALETTE.textSecondary
                     }
                 },
                 y: {
                     min: yMin,
                     max: yMax,
+                    beginAtZero: false,
+                    display: false,
                     ticks: {
-                        stepSize: 10,
+                        stepSize: yStep,
                         font: { size: 10 }
                     },
-                    grid: { color: '#eee' }
+                    grid: { color: SHAREHARMONY_PALETTE.bgLighter }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index',
+                axis: 'x'
+            }
+        }
+    });
+}
+
+/**
+ * 번호통계 차트: X축 1~45, Y축 출현횟수
+ */
+/**
+ * 출현통계 차트: X축 1~45, Y축 당첨회수 (해당 번호가 당첨번호에 포함된 회차 수)
+ */
+function renderWinFrequencyChart(currentData) {
+    const ctx = document.getElementById('winFrequencyChart');
+    if (!ctx) return;
+
+    const displayData = currentData || AppState.currentStatsRounds || AppState.allLotto645Data;
+    if (!displayData || displayData.length === 0) return;
+
+    // 1~45 번호별 당첨회수 (메인번호 + 보너스번호 포함)
+    const freq = new Array(45).fill(0);
+    displayData.forEach(r => {
+        if (r.numbers) {
+            r.numbers.forEach(n => {
+                const num = parseInt(n, 10);
+                if (num >= 1 && num <= 45) freq[num - 1]++;
+            });
+        }
+        if (r.bonus) {
+            const bn = parseInt(r.bonus, 10);
+            if (bn >= 1 && bn <= 45) freq[bn - 1]++;
+        }
+    });
+
+    const labels = [];
+    for (let i = 1; i <= 45; i++) labels.push(String(i));
+
+    const bgColors = labels.map((_, i) => {
+        const n = i + 1;
+        if (n <= 10) return 'var(--lotto-yellow)';
+        if (n <= 20) return 'var(--lotto-blue)';
+        if (n <= 30) return 'var(--lotto-red)';
+        if (n <= 40) return 'var(--lotto-gray)';
+        return 'var(--lotto-green)';
+    });
+
+    const rootStyle = getComputedStyle(document.documentElement);
+    const resolveColor = (v) => {
+        const match = v.match(/var\((--[^)]+)\)/);
+        return match ? rootStyle.getPropertyValue(match[1]).trim() : v;
+    };
+    const resolvedBg = bgColors.map(resolveColor);
+
+    const maxFreq = Math.max(...freq);
+    const avgFreq = freq.reduce((a, b) => a + b, 0) / 45;
+
+    if (window.winFreqChart) {
+        window.winFreqChart.destroy();
+    }
+
+    window.winFreqChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '당첨회수',
+                    data: freq,
+                    backgroundColor: resolvedBg,
+                    borderColor: resolvedBg.map(c => c),
+                    borderWidth: 1,
+                    barPercentage: 0.85,
+                    categoryPercentage: 0.9
+                },
+                {
+                    label: '평균',
+                    data: new Array(45).fill(parseFloat(avgFreq.toFixed(1))),
+                    type: 'line',
+                    borderColor: '#D96E64',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    pointRadius: 0,
+                    fill: false,
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function (items) {
+                            return items[0].label + '번';
+                        },
+                        label: function () { return null; },
+                        afterBody: function (items) {
+                            const idx = items[0].dataIndex;
+                            const count = freq[idx];
+                            const totalCount = freq.reduce((a, b) => a + b, 0);
+                            const pct = totalCount > 0 ? (count / totalCount * 100).toFixed(2) : '0.00';
+                            return [
+                                '출현: ' + count + '회 (보너스공 포함)',
+                                '평균: ' + avgFreq.toFixed(2),
+                                '비율: ' + pct + '%'
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { display: false },
+                    ticks: {
+                        font: { size: 11 },
+                        color: SHAREHARMONY_PALETTE.textSecondary
+                    }
+                },
+                y: {
+                    display: true,
+                    beginAtZero: true,
+                    grid: { color: SHAREHARMONY_PALETTE.bgLighter },
+                    ticks: {
+                        font: { size: 10 },
+                        stepSize: Math.ceil(maxFreq / 10)
+                    }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index',
+                axis: 'x'
+            }
+        }
+    });
+}
+
+function renderNumberFrequencyChart(currentData) {
+    const ctx = document.getElementById('numberFrequencyChart');
+    if (!ctx) return;
+
+    const displayData = currentData || AppState.currentStatsRounds || AppState.allLotto645Data;
+    if (!displayData || displayData.length === 0) return;
+
+    // 1~45 번호별 출현횟수 집계
+    const freq = new Array(45).fill(0);
+    displayData.forEach(r => {
+        if (!r.numbers) return;
+        r.numbers.forEach(n => {
+            const num = parseInt(n, 10);
+            if (num >= 1 && num <= 45) freq[num - 1]++;
+        });
+    });
+
+    const labels = [];
+    for (let i = 1; i <= 45; i++) labels.push(String(i));
+
+    // 동행복권 색상 매핑
+    const bgColors = labels.map((_, i) => {
+        const n = i + 1;
+        if (n <= 10) return 'var(--lotto-yellow)';
+        if (n <= 20) return 'var(--lotto-blue)';
+        if (n <= 30) return 'var(--lotto-red)';
+        if (n <= 40) return 'var(--lotto-gray)';
+        return 'var(--lotto-green)';
+    });
+
+    // CSS 변수를 실제 색상으로 변환
+    const rootStyle = getComputedStyle(document.documentElement);
+    const resolveColor = (v) => {
+        const match = v.match(/var\((--[^)]+)\)/);
+        return match ? rootStyle.getPropertyValue(match[1]).trim() : v;
+    };
+    const resolvedBg = bgColors.map(resolveColor);
+
+    const maxFreq = Math.max(...freq);
+    const avgFreq = freq.reduce((a, b) => a + b, 0) / 45;
+
+    if (window.numberFreqChart) {
+        window.numberFreqChart.destroy();
+    }
+
+    window.numberFreqChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '출현횟수',
+                    data: freq,
+                    backgroundColor: resolvedBg,
+                    borderColor: resolvedBg.map(c => c),
+                    borderWidth: 1,
+                    barPercentage: 0.85,
+                    categoryPercentage: 0.9
+                },
+                {
+                    label: '평균',
+                    data: new Array(45).fill(parseFloat(avgFreq.toFixed(1))),
+                    type: 'line',
+                    borderColor: '#4A90D9',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    pointRadius: 0,
+                    fill: false,
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function (items) {
+                            return items[0].label + '번';
+                        },
+                        label: function () { return null; },
+                        afterBody: function (items) {
+                            const idx = items[0].dataIndex;
+                            const count = freq[idx];
+                            const totalCount = freq.reduce((a, b) => a + b, 0);
+                            const pct = totalCount > 0 ? (count / totalCount * 100).toFixed(2) : '0.00';
+                            return [
+                                '출현: ' + count + '회',
+                                '평균: ' + avgFreq.toFixed(2),
+                                '비율: ' + pct + '%'
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { display: false },
+                    ticks: {
+                        font: { size: 11 },
+                        color: SHAREHARMONY_PALETTE.textSecondary
+                    }
+                },
+                y: {
+                    display: true,
+                    beginAtZero: true,
+                    grid: { color: SHAREHARMONY_PALETTE.bgLighter },
+                    ticks: {
+                        font: { size: 10 },
+                        stepSize: Math.ceil(maxFreq / 10)
+                    }
                 }
             },
             interaction: {
@@ -5545,6 +6752,75 @@ function getRoundDateObject(round) {
     return parseDate(strVal);
 }
 
+/**
+ * 화면 우측 하단 'TOP' 버튼 기능 설정
+ */
+function setupScrollToTopButton() {
+    const topBtn = document.getElementById('scrollToTopBtn');
+    if (!topBtn) return;
+
+    // 스크롤 가능한 메인 패널 3개
+    const scrollContainers = [
+        document.querySelector('.panel-box-stats .panel-inner'),
+        document.querySelector('.panel-box-game .panel-inner'),
+        document.querySelector('.panel-box-win .panel-inner')
+    ].filter(el => el); // null인 경우 제외
+
+    if (scrollContainers.length === 0) return;
+
+    // 스크롤 위치를 감지하여 버튼 표시/숨김
+    const checkScroll = () => {
+        // 3개 패널 중 하나라도 200px 이상 스크롤되면 버튼 표시
+        const shouldShow = scrollContainers.some(container => container.scrollTop > 200);
+        topBtn.classList.toggle('show', shouldShow);
+    };
+
+    // 각 패널에 스크롤 이벤트 리스너 추가
+    scrollContainers.forEach(container => {
+        container.addEventListener('scroll', checkScroll);
+    });
+
+    // 버튼 클릭 시, 현재 가장 많이 스크롤된 패널을 최상단으로 이동
+    topBtn.addEventListener('click', () => {
+        const mostScrolledContainer = scrollContainers.reduce((prev, current) => {
+            return (prev.scrollTop > current.scrollTop) ? prev : current;
+        });
+
+        if (mostScrolledContainer) {
+            mostScrolledContainer.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+}
+
 if (document.readyState === 'complete') {
     setTimeout(initializeApp, 200);
+}
+
+function showHelpModal() {
+    let modal = document.getElementById('helpModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'helpModal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width:560px;">
+                <h2 style="margin:0 0 16px;font-size:1.2rem;color:var(--color-primary);">ShareHarmony Lotto 도움말</h2>
+                <div style="font-size:0.88rem;line-height:1.8;color:var(--color-text-primary);">
+                    <p><b>좌측 패널</b> — 조회기간/회차를 설정하고 [조회]를 누르면 통계가 갱신됩니다.</p>
+                    <p><b>중앙 패널</b> — 옵션필터 조건에 맞는 번호를 AI추천/반자동/수동 모드로 생성합니다.</p>
+                    <p><b>우측 패널</b> — 회차별 당첨번호를 합계값으로 필터링하여 조회합니다.</p>
+                    <p><b>최근당첨번호</b> — 동행복권 API에서 최신 회차를 가져와 데이터를 갱신합니다.</p>
+                    <p><b>하단 차트</b> — 합계통계/출현통계/번호통계를 그래프로 확인할 수 있습니다.</p>
+                </div>
+                <div style="text-align:right;margin-top:16px;">
+                    <button onclick="document.getElementById('helpModal').classList.remove('show')"
+                        style="padding:8px 20px;background:var(--color-primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;">닫기</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.remove('show');
+        });
+    }
+    modal.classList.add('show');
 }
